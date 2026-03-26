@@ -1,20 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useFirebase } from './FirebaseProvider';
 import { motion } from 'framer-motion';
-import { Check, Star, X, Sparkles, Trophy, TrendingUp, CreditCard, Lock } from 'lucide-react';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+import { Check, Star, X, Sparkles, Trophy, TrendingUp, Lock } from 'lucide-react';
 
 export default function Subscription({ onComplete }: { onComplete: () => void }) {
   const { profile, user } = useFirebase();
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState('');
-  const [success, setSuccess]     = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+  const [success, setSuccess]   = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
 
   const isPremium = profile?.subscriptionType === 'premium';
+
+  // Vérifier si on revient d'un paiement Stripe réussi
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session_id');
+    const plan = params.get('plan') as 'monthly' | 'yearly' | null;
+
+    if (sessionId && plan && user) {
+      const functions = getFunctions();
+      const confirmCheckout = httpsCallable(functions, 'confirmCheckout');
+      confirmCheckout({ sessionId, plan })
+        .then(() => {
+          setSuccess(true);
+          window.history.replaceState({}, '', window.location.pathname);
+        })
+        .catch(e => setError(e.message));
+    }
+  }, [user]);
 
   const handleSubscribe = async (plan: 'monthly' | 'yearly') => {
     if (!user) return;
@@ -24,34 +39,17 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
 
     try {
       const functions = getFunctions();
-      const createPaymentIntent = httpsCallable(functions, 'createPaymentIntent');
-      const result = await createPaymentIntent({ plan });
-      const { clientSecret } = result.data as { clientSecret: string };
-
-      const stripe = await stripePromise;
-      if (!stripe) throw new Error('Stripe non chargé');
-
-      // Confirmer le paiement
-      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: { token: 'tok_visa' }, // Token de test Stripe
-          billing_details: { email: user.email || '' },
-        },
+      const createCheckoutSession = httpsCallable(functions, 'createCheckoutSession');
+      const result = await createCheckoutSession({
+        plan,
+        successUrl: window.location.origin + window.location.pathname,
+        cancelUrl:  window.location.origin + window.location.pathname,
       });
 
-      if (stripeError) {
-        setError(stripeError.message || 'Erreur de paiement');
-        return;
-      }
-
-      if (paymentIntent?.status === 'succeeded') {
-        const confirmSubscription = httpsCallable(functions, 'confirmSubscription');
-        await confirmSubscription({ plan, paymentIntentId: paymentIntent.id });
-        setSuccess(true);
-      }
+      const { url } = result.data as { url: string };
+      window.location.href = url;
     } catch (e: any) {
       setError(e.message || 'Une erreur est survenue');
-    } finally {
       setLoading(false);
     }
   };
@@ -92,7 +90,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
         </motion.div>
       ) : (
         <>
-          {/* Features card */}
           <div className="bg-indigo-600 p-8 rounded-[40px] text-white shadow-xl mb-8 relative overflow-hidden">
             <div className="relative z-10">
               <h3 className="text-2xl font-bold mb-6">Pourquoi passer au Premium ?</h3>
@@ -117,7 +114,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
             <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-medium mb-4">{error}</div>
           )}
 
-          {/* Plans */}
           <div className="space-y-4 flex-1">
             <PlanCard
               title="Mensuel" price="3€" period="/ mois" description="Idéal pour commencer"
@@ -131,10 +127,9 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
             />
           </div>
 
-          {/* Security note */}
           <div className="flex items-center justify-center gap-2 mt-6 text-slate-400">
             <Lock size={14} />
-            <p className="text-xs font-medium">Paiement sécurisé par Stripe</p>
+            <p className="text-xs font-medium">Paiement sécurisé par Stripe • Apple Pay • Google Pay</p>
           </div>
         </>
       )}
@@ -167,7 +162,7 @@ function PlanCard({ title, price, period, description, highlight, onClick, loadi
       {loading && (
         <div className="mt-3 flex items-center gap-2 text-indigo-600">
           <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs font-bold">Traitement en cours...</span>
+          <span className="text-xs font-bold">Redirection vers le paiement...</span>
         </div>
       )}
     </button>
