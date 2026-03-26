@@ -4,6 +4,7 @@ import {
   Settings, CreditCard, LogOut, ChevronRight, Trophy,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { doc, updateDoc } from 'firebase/firestore';
 import { useFirebase } from './components/FirebaseProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Auth from './components/Auth';
@@ -13,7 +14,7 @@ import BetLogger from './components/BetLogger';
 import Progress from './components/Progress';
 import Subscription from './components/Subscription';
 import { syncStreakAndXP } from './services/streak';
-import { auth } from './services/firebase';
+import { auth, db } from './services/firebase';
 
 type Tab = 'dashboard' | 'progress' | 'log' | 'profile' | 'subscription';
 
@@ -21,7 +22,6 @@ export default function App() {
   const { user, profile, loading, isAuthReady } = useFirebase();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
-  // Auto-sync streak & XP when app loads
   useEffect(() => {
     if (user && profile) {
       syncStreakAndXP(user.uid, profile).catch(console.error);
@@ -42,6 +42,14 @@ export default function App() {
   if (!user)    return <Auth />;
   if (!profile) return <Onboarding />;
 
+  const handleResetTofree = async () => {
+    if (!user) return;
+    await updateDoc(doc(db, 'users', user.uid), {
+      subscriptionType: 'free',
+      subscriptionStatus: 'active',
+    });
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':    return <Dashboard />;
@@ -55,7 +63,6 @@ export default function App() {
             {profile.firstName} {profile.lastName}
           </p>
 
-          {/* Mini stats */}
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
               { label: 'Niveau',  value: profile.level },
@@ -82,6 +89,11 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
+            <button onClick={handleResetTofree}
+              className="w-full flex items-center gap-3 p-4 bg-orange-50 text-orange-600 rounded-2xl font-semibold">
+              <CreditCard size={20} /> Passer en Free (test)
+            </button>
+
             <button onClick={() => auth.signOut()}
               className="w-full flex items-center gap-3 p-4 bg-red-50 text-red-600 rounded-2xl font-semibold">
               <LogOut size={20} /> Déconnexion
@@ -97,7 +109,6 @@ export default function App() {
     <ErrorBoundary>
       <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto relative shadow-2xl">
 
-        {/* ── Header ── */}
         <header className="p-6 bg-white border-b border-slate-100 flex justify-between items-center sticky top-0 z-10">
           <div>
             <h1 className="text-2xl font-black text-indigo-600 tracking-tighter">StopBet</h1>
@@ -109,7 +120,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* ── Content ── */}
         <main>
           <AnimatePresence mode="wait">
             <motion.div
@@ -124,7 +134,6 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        {/* ── Bottom navigation ── */}
         <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-4 py-3 flex justify-around items-center z-20">
           <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}
             icon={<LayoutDashboard size={22} />} label="Accueil" />
@@ -132,7 +141,6 @@ export default function App() {
           <NavBtn active={activeTab === 'progress'} onClick={() => setActiveTab('progress')}
             icon={<TrendingUp size={22} />} label="Progrès" />
 
-          {/* Central floating button */}
           <button onClick={() => setActiveTab('log')}
             className={`p-4 rounded-full shadow-lg transition-transform active:scale-95 ${
               activeTab === 'log' ? 'bg-red-500 text-white' : 'bg-slate-900 text-white'
