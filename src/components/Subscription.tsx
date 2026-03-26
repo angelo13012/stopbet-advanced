@@ -1,28 +1,80 @@
-import React, { useState } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import React, { useState, useEffect } from 'react';
+import { loadStripe } from '@stripe/stripe-js';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useFirebase } from './FirebaseProvider';
 import { motion } from 'framer-motion';
-import { Check, Star, X, Sparkles, Trophy, TrendingUp } from 'lucide-react';
+import { Check, Star, X, Sparkles, Trophy, TrendingUp, CreditCard, Lock } from 'lucide-react';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 export default function Subscription({ onComplete }: { onComplete: () => void }) {
   const { profile, user } = useFirebase();
-  const [loading, setLoading] = useState(false);
-
-  const handleSubscribe = async (type: 'premium') => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      await updateDoc(doc(db, 'users', user.uid), {
-        subscriptionType:   type,
-        subscriptionStatus: 'active',
-      });
-      onComplete();
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+  const [success, setSuccess]     = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
 
   const isPremium = profile?.subscriptionType === 'premium';
+
+  const handleSubscribe = async (plan: 'monthly' | 'yearly') => {
+    if (!user) return;
+    setLoading(true);
+    setError('');
+    setSelectedPlan(plan);
+
+    try {
+      const functions = getFunctions();
+      const createPaymentIntent = httpsCallable(functions, 'createPaymentIntent');
+      const result = await createPaymentIntent({ plan });
+      const { clientSecret } = result.data as { clientSecret: string };
+
+      const stripe = await stripePromise;
+      if (!stripe) throw new Error('Stripe non chargé');
+
+      // Confirmer le paiement
+      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: { token: 'tok_visa' }, // Token de test Stripe
+          billing_details: { email: user.email || '' },
+        },
+      });
+
+      if (stripeError) {
+        setError(stripeError.message || 'Erreur de paiement');
+        return;
+      }
+
+      if (paymentIntent?.status === 'succeeded') {
+        const confirmSubscription = httpsCallable(functions, 'confirmSubscription');
+        await confirmSubscription({ plan, paymentIntentId: paymentIntent.id });
+        setSuccess(true);
+      }
+    } catch (e: any) {
+      setError(e.message || 'Une erreur est survenue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center min-h-[60vh]">
+        <motion.div
+          initial={{ scale: 0 }} animate={{ scale: 1 }}
+          transition={{ type: 'spring', stiffness: 200 }}
+          className="text-center"
+        >
+          <div className="text-7xl mb-6">🎉</div>
+          <h2 className="text-3xl font-black text-slate-900 mb-3">Bienvenue Premium !</h2>
+          <p className="text-slate-500 font-medium mb-8">Toutes les fonctionnalités avancées sont débloquées.</p>
+          <button onClick={onComplete}
+            className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all">
+            Découvrir les nouvelles fonctionnalités
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 min-h-screen bg-slate-50 flex flex-col">
@@ -40,6 +92,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
         </motion.div>
       ) : (
         <>
+          {/* Features card */}
           <div className="bg-indigo-600 p-8 rounded-[40px] text-white shadow-xl mb-8 relative overflow-hidden">
             <div className="relative z-10">
               <h3 className="text-2xl font-bold mb-6">Pourquoi passer au Premium ?</h3>
@@ -60,16 +113,29 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
             <div className="absolute -right-10 -bottom-10 opacity-10 rotate-12"><Star size={200} /></div>
           </div>
 
+          {error && (
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-medium mb-4">{error}</div>
+          )}
+
+          {/* Plans */}
           <div className="space-y-4 flex-1">
-            <PlanCard title="Mensuel" price="3€" period="/ mois" description="Idéal pour commencer"
-              onClick={() => handleSubscribe('premium')} loading={loading} />
-            <PlanCard title="Annuel" price="30€" period="/ an" description="2 mois offerts 🎁" highlight
-              onClick={() => handleSubscribe('premium')} loading={loading} />
+            <PlanCard
+              title="Mensuel" price="3€" period="/ mois" description="Idéal pour commencer"
+              onClick={() => handleSubscribe('monthly')}
+              loading={loading && selectedPlan === 'monthly'}
+            />
+            <PlanCard
+              title="Annuel" price="30€" period="/ an" description="2 mois offerts 🎁" highlight
+              onClick={() => handleSubscribe('yearly')}
+              loading={loading && selectedPlan === 'yearly'}
+            />
           </div>
 
-          <p className="text-center text-xs text-slate-400 mt-8 px-8">
-            Paiement sécurisé via Stripe. Annulez à tout moment.
-          </p>
+          {/* Security note */}
+          <div className="flex items-center justify-center gap-2 mt-6 text-slate-400">
+            <Lock size={14} />
+            <p className="text-xs font-medium">Paiement sécurisé par Stripe</p>
+          </div>
         </>
       )}
     </div>
@@ -98,6 +164,12 @@ function PlanCard({ title, price, period, description, highlight, onClick, loadi
         </div>
       </div>
       <p className="text-sm font-medium text-slate-500">{description}</p>
+      {loading && (
+        <div className="mt-3 flex items-center gap-2 text-indigo-600">
+          <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-bold">Traitement en cours...</span>
+        </div>
+      )}
     </button>
   );
 }
