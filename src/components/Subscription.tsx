@@ -1,25 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useFirebase } from './FirebaseProvider';
+import { app } from '../services/firebase';
 import { motion } from 'framer-motion';
 import { Check, Star, X, Sparkles, Trophy, TrendingUp, Lock } from 'lucide-react';
 
 export default function Subscription({ onComplete }: { onComplete: () => void }) {
   const { profile, user } = useFirebase();
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
-  const [success, setSuccess]   = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState('');
+  const [success, setSuccess]           = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly' | null>(null);
 
   const isPremium = profile?.subscriptionType === 'premium';
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params    = new URLSearchParams(window.location.search);
     const sessionId = params.get('session_id');
-    const plan = params.get('plan') as 'monthly' | 'yearly' | null;
+    const plan      = params.get('plan') as 'monthly' | 'yearly' | null;
 
     if (sessionId && plan && user) {
-      const functions = getFunctions(undefined, 'us-central1');
+      const functions       = getFunctions(app, 'us-central1');
       const confirmCheckout = httpsCallable(functions, 'confirmCheckout');
       confirmCheckout({ sessionId, plan })
         .then(() => {
@@ -35,16 +36,14 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
     setLoading(true);
     setError('');
     setSelectedPlan(plan);
-
     try {
-      const functions = getFunctions(undefined, 'us-central1');
+      const functions             = getFunctions(app, 'us-central1');
       const createCheckoutSession = httpsCallable(functions, 'createCheckoutSession');
-      const result = await createCheckoutSession({
+      const result                = await createCheckoutSession({
         plan,
         successUrl: window.location.origin + window.location.pathname,
         cancelUrl:  window.location.origin + window.location.pathname,
       });
-
       const { url } = result.data as { url: string };
       window.location.href = url;
     } catch (e: any) {
