@@ -13,14 +13,13 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
 
   const isPremium = profile?.subscriptionType === 'premium';
 
-  // Vérifier si on revient d'un paiement Stripe réussi
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sessionId = params.get('session_id');
     const plan = params.get('plan') as 'monthly' | 'yearly' | null;
 
     if (sessionId && plan && user) {
-      const functions = getFunctions();
+      const functions = getFunctions(undefined, 'us-central1');
       const confirmCheckout = httpsCallable(functions, 'confirmCheckout');
       confirmCheckout({ sessionId, plan })
         .then(() => {
@@ -38,7 +37,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
     setSelectedPlan(plan);
 
     try {
-      const functions = getFunctions();
+      const functions = getFunctions(undefined, 'us-central1');
       const createCheckoutSession = httpsCallable(functions, 'createCheckoutSession');
       const result = await createCheckoutSession({
         plan,
