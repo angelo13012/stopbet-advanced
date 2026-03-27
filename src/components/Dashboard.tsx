@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
-  doc, updateDoc, addDoc, deleteDoc,
+  doc, updateDoc, addDoc, deleteDoc, getDoc,
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useFirebase } from './FirebaseProvider';
@@ -9,10 +9,25 @@ import { Bet, Goal, ALL_BADGES, getLevelMeta } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingDown, Flame, Target, Sparkles,
-  Plus, Trash2, X, Trophy, Star, Zap,
+  Plus, Trash2, X, Trophy, Star, Zap, Lock,
 } from 'lucide-react';
 import { getMotivationalMessage, analyzeRelapsePattern } from '../services/aiCoach';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+
+const LOCAL_MESSAGES = [
+  "Chaque jour sans pari est une victoire. Continue comme ça ! 💪",
+  "Tu es plus fort que tu ne le penses. Reste concentré sur tes objectifs.",
+  "La liberté financière commence par une seule décision. Tu l'as déjà prise.",
+  "Chaque euro économisé est un pas vers tes rêves. Bravo !",
+  "Tu construis quelque chose de solide. Ne lâche pas maintenant.",
+];
+
+function getLocalMessage(streak: number): string {
+  if (streak === 0) return "Aujourd'hui est un nouveau départ. Chaque grand voyage commence par un premier pas. 💪";
+  if (streak < 7)  return `${streak} jour${streak > 1 ? 's' : ''} déjà ! Tu bâtis quelque chose de solide. Continue !`;
+  if (streak < 30) return `${streak} jours sans pari — tu montres chaque jour que tu es plus fort. 🔥`;
+  return `${streak} jours — tu es une légende vivante. Rien ne peut t'arrêter. 👑`;
+}
 
 export default function Dashboard() {
   const { profile, user } = useFirebase();
@@ -27,6 +42,7 @@ export default function Dashboard() {
 
   const now          = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const todayStr     = now.toISOString().slice(0, 10);
 
   // Firestore listeners
   useEffect(() => {
@@ -42,10 +58,45 @@ export default function Dashboard() {
     return () => { unsubBets(); unsubGoals(); };
   }, [user]);
 
-  // AI motivational message
+  // Coach message — 1 par jour, Claude uniquement pour premium
   useEffect(() => {
-    if (profile) getMotivationalMessage(profile, recentBets).then(setCoachMsg);
-  }, [profile, recentBets.length]);
+    if (!profile || !user) return;
+
+    const isPremium = profile.subscriptionType === 'premium';
+
+    // Utilisateurs free — message local uniquement
+    if (!isPremium) {
+      setCoachMsg(getLocalMessage(profile.streakCount));
+      return;
+    }
+
+    // Utilisateurs premium — vérifier si un message existe déjà aujourd'hui
+    const loadCoachMessage = async () => {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const data    = userDoc.data();
+
+      if (data?.coachMessageDate === todayStr && data?.coachMessage) {
+        // Message déjà généré aujourd'hui — on le réutilise
+        setCoachMsg(data.coachMessage);
+        return;
+      }
+
+      // Générer un nouveau message avec Claude
+      try {
+        const msg = await getMotivationalMessage(profile, recentBets);
+        setCoachMsg(msg);
+        // Sauvegarder dans Firestore pour aujourd'hui
+        await updateDoc(doc(db, 'users', user.uid), {
+          coachMessage:     msg,
+          coachMessageDate: todayStr,
+        });
+      } catch {
+        setCoachMsg(getLocalMessage(profile.streakCount));
+      }
+    };
+
+    loadCoachMessage();
+  }, [profile?.subscriptionType, user?.uid, todayStr]);
 
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,12 +134,11 @@ export default function Dashboard() {
   const levelMeta    = getLevelMeta(profile.xp ?? 0);
   const earnedBadges = ALL_BADGES.filter(b => (profile.badges ?? []).includes(b.id));
 
-  const pieData   = [
+  const pieData = [
     { name: 'Dépensé',  value: totalSpent },
     { name: 'Restant',  value: Math.max(0, profile.monthlyIncome - totalSpent) },
   ];
   const COLORS = ['#4f46e5', '#f1f5f9'];
-
   const spendColor = spendPct < 5 ? 'text-emerald-500' : spendPct < 15 ? 'text-orange-500' : 'text-red-500';
 
   return (
@@ -150,23 +200,31 @@ export default function Dashboard() {
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-start">
         <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 shrink-0"><Sparkles size={24} /></div>
         <div className="flex-1">
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-1">Message du coach</p>
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Message du coach</p>
+            {isPremium && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">IA Claude</span>}
+          </div>
           <p className="text-slate-700 font-medium leading-relaxed italic">"{coachMsg}"</p>
+
           {isPremium && recentBets.length >= 2 && (
             <button onClick={loadAnalysis}
               className="mt-3 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
               <Sparkles size={12} /> Analyser mes rechutes
             </button>
           )}
+
           {!isPremium && (
-            <p className="mt-2 text-xs text-slate-400 font-medium">
-              🔒 Analyse des rechutes — <span className="text-indigo-600 font-bold">Premium</span>
-            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <Lock size={12} className="text-slate-400" />
+              <p className="text-xs text-slate-400 font-medium">
+                Coach IA Claude — <span className="text-indigo-600 font-bold">Premium uniquement</span>
+              </p>
+            </div>
           )}
         </div>
       </div>
 
-      {/* ── Relapse analysis modal ── */}
+      {/* ── Relapse analysis ── */}
       <AnimatePresence>
         {showAnalysis && (
           <motion.div
@@ -302,7 +360,6 @@ export default function Dashboard() {
   );
 }
 
-// ── Goal card ──
 function GoalCard({ goal, saved, onDelete }: { goal: Goal; saved: number; onDelete: () => void }) {
   const progress = Math.min(100, (saved / goal.cost) * 100);
   return (
