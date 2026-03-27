@@ -5,10 +5,29 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
-import { LogIn, UserPlus, Mail, Lock, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, ArrowLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type View = 'login' | 'register' | 'forgot';
+
+function LogoSB() {
+  return (
+    <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="30" fill="#0f172a"/>
+      <circle cx="32" cy="32" r="25" fill="none" stroke="#4f46e5" strokeWidth="2.5"/>
+      <text
+        x="32" y="39"
+        fontFamily="system-ui, -apple-system, sans-serif"
+        fontSize="22"
+        fontWeight="800"
+        fill="white"
+        textAnchor="middle"
+        letterSpacing="-1"
+      >SB</text>
+      <line x1="14" y1="50" x2="50" y2="14" stroke="#ef4444" strokeWidth="3.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
 
 export default function Auth() {
   const [view,     setView]     = useState<View>('login');
@@ -51,8 +70,8 @@ export default function Auth() {
         className="w-full bg-white p-8 rounded-3xl shadow-xl border border-slate-100"
       >
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg mb-4">
-            <ShieldCheck size={32} />
+          <div className="mb-4">
+            <LogoSB />
           </div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tighter">StopBet</h1>
           <p className="text-slate-500 font-medium text-center mt-2">
