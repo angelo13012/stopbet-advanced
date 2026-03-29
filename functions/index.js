@@ -9,7 +9,7 @@ const stripeSecret = defineSecret("STRIPE_SECRET");
 
 // Prix officiels — source de vérité côté serveur
 const PRICES = {
-  monthly: 300,  // 3.00€ en centimes
+  monthly: 349,  // 3.49€ en centimes
   yearly:  3000, // 30.00€ en centimes
 };
 

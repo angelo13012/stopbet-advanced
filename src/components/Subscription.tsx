@@ -114,7 +114,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
 
           <div className="space-y-4 flex-1">
             <PlanCard
-              title="Mensuel" price="3€" period="/ mois" description="Idéal pour commencer"
+              title="Mensuel" price="3,49€" period="/ mois" description="Idéal pour commencer"
               onClick={() => handleSubscribe('monthly')}
               loading={loading && selectedPlan === 'monthly'}
             />
