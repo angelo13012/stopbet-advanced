@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
   doc, updateDoc, addDoc, deleteDoc, getDoc,
@@ -14,14 +14,6 @@ import {
 import { getMotivationalMessage, analyzeRelapsePattern } from '../services/aiCoach';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
-const LOCAL_MESSAGES = [
-  "Chaque jour sans pari est une victoire. Continue comme ça ! 💪",
-  "Tu es plus fort que tu ne le penses. Reste concentré sur tes objectifs.",
-  "La liberté financière commence par une seule décision. Tu l'as déjà prise.",
-  "Chaque euro économisé est un pas vers tes rêves. Bravo !",
-  "Tu construis quelque chose de solide. Ne lâche pas maintenant.",
-];
-
 function getLocalMessage(streak: number): string {
   if (streak === 0) return "Aujourd'hui est un nouveau départ. Chaque grand voyage commence par un premier pas. 💪";
   if (streak < 7)  return `${streak} jour${streak > 1 ? 's' : ''} déjà ! Tu bâtis quelque chose de solide. Continue !`;
@@ -31,20 +23,23 @@ function getLocalMessage(streak: number): string {
 
 export default function Dashboard() {
   const { profile, user } = useFirebase();
-  const [recentBets, setRecentBets] = useState<Bet[]>([]);
-  const [goals,      setGoals]      = useState<Goal[]>([]);
-  const [coachMsg,   setCoachMsg]   = useState('Chargement de votre message du jour…');
-  const [analysis,   setAnalysis]   = useState<string | null>(null);
+  const [recentBets,   setRecentBets]   = useState<Bet[]>([]);
+  const [goals,        setGoals]        = useState<Goal[]>([]);
+  const [coachMsg,     setCoachMsg]     = useState('Chargement de votre message du jour…');
+  const [analysis,     setAnalysis]     = useState<string | null>(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showAddGoal,  setShowAddGoal]  = useState(false);
-  const [newGoal, setNewGoal] = useState({ title: '', cost: '' });
-  const [loading, setLoading] = useState(false);
+  const [newGoal,      setNewGoal]      = useState({ title: '', cost: '' });
+  const [loading,      setLoading]      = useState(false);
+
+  // Ref pour éviter les appels Claude en double
+  const coachMsgLoadedRef = useRef<string | null>(null);
 
   const now          = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const todayStr     = now.toISOString().slice(0, 10);
 
-  // Firestore listeners
+  // ── Firestore listeners (stables, pas de recréation inutile) ──
   useEffect(() => {
     if (!user) return;
     const unsubBets = onSnapshot(
@@ -56,47 +51,64 @@ export default function Dashboard() {
       snap => setGoals(snap.docs.map(d => ({ id: d.id, ...d.data() } as Goal)))
     );
     return () => { unsubBets(); unsubGoals(); };
-  }, [user]);
+  }, [user?.uid]); // Seulement quand l'uid change — pas à chaque render
 
-  // Coach message — 1 par jour, Claude uniquement pour premium
+  // ── Coach message — 1 appel max par jour, zéro boucle ──
   useEffect(() => {
     if (!profile || !user) return;
 
-    const isPremium = profile.subscriptionType === 'premium';
+    const isPremium  = profile.subscriptionType === 'premium';
+    const cacheKey   = `${user.uid}_${todayStr}_${isPremium ? 'premium' : 'free'}`;
 
-    // Utilisateurs free — message local uniquement
+    // Evite de re-déclencher si déjà chargé pour aujourd'hui
+    if (coachMsgLoadedRef.current === cacheKey) return;
+
     if (!isPremium) {
+      coachMsgLoadedRef.current = cacheKey;
       setCoachMsg(getLocalMessage(profile.streakCount));
       return;
     }
 
-    // Utilisateurs premium — vérifier si un message existe déjà aujourd'hui
-    const loadCoachMessage = async () => {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const data    = userDoc.data();
-
-      if (data?.coachMessageDate === todayStr && data?.coachMessage) {
-        // Message déjà généré aujourd'hui — on le réutilise
-        setCoachMsg(data.coachMessage);
-        return;
-      }
-
-      // Générer un nouveau message avec Claude
+    // Premium — vérifier Firestore d'abord
+    let cancelled = false;
+    const load = async () => {
       try {
-        const msg = await getMotivationalMessage(profile, recentBets);
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (cancelled) return;
+
+        const data = userDoc.data();
+        if (data?.coachMessageDate === todayStr && data?.coachMessage) {
+          coachMsgLoadedRef.current = cacheKey;
+          setCoachMsg(data.coachMessage);
+          return;
+        }
+
+        // Générer avec Claude — snapshot des bets au moment de l'appel
+        const betsSnap = await import('firebase/firestore').then(({ getDocs }) =>
+          getDocs(query(collection(db, 'users', user.uid, 'bets'), orderBy('date', 'desc')))
+        );
+        if (cancelled) return;
+
+        const bets = betsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Bet));
+        const msg  = await getMotivationalMessage(profile, bets);
+        if (cancelled) return;
+
+        coachMsgLoadedRef.current = cacheKey;
         setCoachMsg(msg);
-        // Sauvegarder dans Firestore pour aujourd'hui
+
+        // Sauvegarder dans Firestore — sans déclencher le listener profile
         await updateDoc(doc(db, 'users', user.uid), {
           coachMessage:     msg,
           coachMessageDate: todayStr,
         });
       } catch {
-        setCoachMsg(getLocalMessage(profile.streakCount));
+        if (!cancelled) setCoachMsg(getLocalMessage(profile.streakCount));
       }
     };
 
-    loadCoachMessage();
-  }, [profile?.subscriptionType, user?.uid, todayStr]);
+    load();
+    return () => { cancelled = true; }; // Cleanup si le composant se démonte
+  }, [user?.uid, profile?.subscriptionType, todayStr]); // Dépendances minimales et stables
 
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +118,8 @@ export default function Dashboard() {
       await addDoc(collection(db, 'users', user.uid, 'goals'), {
         title: newGoal.title, cost: parseFloat(newGoal.cost), progress: 0,
       });
-      setNewGoal({ title: '', cost: '' }); setShowAddGoal(false);
+      setNewGoal({ title: '', cost: '' });
+      setShowAddGoal(false);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -116,35 +129,35 @@ export default function Dashboard() {
     await deleteDoc(doc(db, 'users', user.uid, 'goals', id));
   };
 
-  const loadAnalysis = async () => {
+  const loadAnalysis = useCallback(async () => {
     if (!profile || recentBets.length < 2) return;
     setShowAnalysis(true);
     if (!analysis) {
       const msg = await analyzeRelapsePattern(profile, recentBets);
       setAnalysis(msg);
     }
-  };
+  }, [profile, recentBets, analysis]);
 
   if (!profile) return null;
 
   const monthBets    = recentBets.filter(b => b.date >= startOfMonth);
   const totalSpent   = monthBets.reduce((s, b) => s + b.amount, 0);
-  const spendPct     = (totalSpent / profile.monthlyIncome) * 100;
+  const spendPct     = profile.monthlyIncome > 0 ? (totalSpent / profile.monthlyIncome) * 100 : 0;
   const isPremium    = profile.subscriptionType === 'premium';
   const levelMeta    = getLevelMeta(profile.xp ?? 0);
   const earnedBadges = ALL_BADGES.filter(b => (profile.badges ?? []).includes(b.id));
 
   const pieData = [
-    { name: 'Dépensé',  value: totalSpent },
-    { name: 'Restant',  value: Math.max(0, profile.monthlyIncome - totalSpent) },
+    { name: 'Dépensé', value: totalSpent },
+    { name: 'Restant', value: Math.max(0, profile.monthlyIncome - totalSpent) },
   ];
-  const COLORS = ['#4f46e5', '#f1f5f9'];
+  const COLORS     = ['#4f46e5', '#f1f5f9'];
   const spendColor = spendPct < 5 ? 'text-emerald-500' : spendPct < 15 ? 'text-orange-500' : 'text-red-500';
 
   return (
     <div className="p-6 space-y-6">
 
-      {/* ── Streak card ── */}
+      {/* ── Streak ── */}
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden"
@@ -159,12 +172,10 @@ export default function Dashboard() {
             Meilleur record : <span className="font-black">{profile.bestStreak ?? 0} jours</span>
           </p>
         </div>
-        <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12">
-          <Flame size={160} />
-        </div>
+        <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12"><Flame size={160} /></div>
       </motion.div>
 
-      {/* ── XP / Level card ── */}
+      {/* ── XP / Level ── */}
       <motion.div
         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
         className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"
@@ -196,23 +207,23 @@ export default function Dashboard() {
         )}
       </motion.div>
 
-      {/* ── AI Coach message ── */}
+      {/* ── Coach message ── */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-start">
         <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 shrink-0"><Sparkles size={24} /></div>
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Message du coach</p>
-            {isPremium && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">IA Claude</span>}
+            {isPremium && (
+              <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">IA Claude</span>
+            )}
           </div>
           <p className="text-slate-700 font-medium leading-relaxed italic">"{coachMsg}"</p>
-
           {isPremium && recentBets.length >= 2 && (
             <button onClick={loadAnalysis}
               className="mt-3 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
               <Sparkles size={12} /> Analyser mes rechutes
             </button>
           )}
-
           {!isPremium && (
             <div className="mt-3 flex items-center gap-2">
               <Lock size={12} className="text-slate-400" />
@@ -224,7 +235,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Relapse analysis ── */}
+      {/* ── Analyse rechutes ── */}
       <AnimatePresence>
         {showAnalysis && (
           <motion.div
@@ -242,12 +253,12 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* ── Financial overview ── */}
+      {/* ── Finances ── */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Total dépensé</p>
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-black text-slate-900">{totalSpent}€</span>
+            <span className="text-2xl font-black text-slate-900">{totalSpent.toFixed(0)}€</span>
             <span className={`text-xs font-bold ${spendColor}`}>{spendPct.toFixed(1)}%</span>
           </div>
         </div>
@@ -268,7 +279,7 @@ export default function Dashboard() {
               <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
                 {pieData.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
               </Pie>
-              <Tooltip />
+              <Tooltip formatter={(v: number) => `${v.toFixed(0)}€`} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -301,7 +312,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Saving Goals ── */}
+      {/* ── Projets d'épargne ── */}
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Projets d'épargne</h4>
@@ -322,7 +333,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Add Goal modal ── */}
+      {/* ── Modal ajout objectif ── */}
       <AnimatePresence>
         {showAddGoal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
