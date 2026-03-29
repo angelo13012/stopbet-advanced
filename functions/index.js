@@ -114,7 +114,7 @@ exports.applyReferralCode = onCall({ secrets: [stripeSecret] }, async (request) 
   const newCount     = (referrerData.referralCount ?? 0) + 1;
   const batch        = admin.firestore().batch();
   batch.update(referrerDoc.ref, { referralCount: newCount });
-  const bonusEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const bonusEndsAt = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString();
   batch.update(admin.firestore().collection("users").doc(request.auth.uid), { referralApplied: true, referredBy: referrerId, referralBonusEnds: bonusEndsAt, subscriptionType: "premium", subscriptionStatus: "active", isTrial: true, trialEndsAt: bonusEndsAt });
   await batch.commit();
   return { success: true, bonusEndsAt, referrerCount: newCount };

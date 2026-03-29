@@ -27,7 +27,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
     ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000))
     : null;
 
-  // Confirmer paiement au retour de Stripe
   useEffect(() => {
     const params    = new URLSearchParams(window.location.search);
     const sessionId = params.get('session_id');
@@ -41,7 +40,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
     }
   }, [user]);
 
-  // Charger le code de parrainage
   useEffect(() => {
     if (!user || !isPremium) return;
     const fns = getFunctions(app, 'us-central1');
@@ -54,9 +52,9 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
     if (!user) return;
     setLoading(true); setError(''); setSelectedPlan(plan);
     try {
-      const fns      = getFunctions(app, 'us-central1');
-      const fnName   = withTrial ? 'createTrialSession' : 'createCheckoutSession';
-      const result   = await httpsCallable(fns, fnName)({
+      const fns    = getFunctions(app, 'us-central1');
+      const fnName = withTrial ? 'createTrialSession' : 'createCheckoutSession';
+      const result = await httpsCallable(fns, fnName)({
         plan,
         successUrl: window.location.origin + window.location.pathname,
         cancelUrl:  window.location.origin + window.location.pathname,
@@ -74,7 +72,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
     try {
       const fns = getFunctions(app, 'us-central1');
       await httpsCallable(fns, 'applyReferralCode')({ code: inputCode.trim() });
-      setReferralMsg('✅ Code appliqué ! Tu as 7 jours Premium offerts.');
+      setReferralMsg('✅ Code appliqué ! Tu as 15 jours Premium offerts.');
     } catch (e: any) {
       setReferralMsg('❌ ' + (e.message || 'Code invalide'));
     } finally {
@@ -83,12 +81,11 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(`Rejoins-moi sur StopBet et arrête de parier ! Utilise mon code ${referralCode} pour obtenir 7 jours Premium offerts. stopbet-app-angel.vercel.app`);
+    navigator.clipboard.writeText(`Rejoins-moi sur StopBet et arrête de parier ! Utilise mon code ${referralCode} pour obtenir 15 jours Premium offerts. stopbet-app-angel.vercel.app`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Écran succès
   if (success) {
     return (
       <div className="p-6 flex flex-col items-center justify-center min-h-[60vh]">
@@ -99,7 +96,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
           </h2>
           <p className="text-slate-500 font-medium mb-2">
             {isTrial
-              ? '7 jours gratuits commencent maintenant. Tu peux annuler à tout moment avant la fin de l\'essai.'
+              ? "7 jours gratuits commencent maintenant. Tu peux annuler à tout moment avant la fin de l'essai."
               : 'Toutes les fonctionnalités avancées sont débloquées.'}
           </p>
           {isTrial && <p className="text-xs text-slate-400 mb-8">Sans annulation, ton abonnement se renouvelle automatiquement.</p>}
@@ -118,7 +115,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
         <button onClick={onComplete} className="p-2 text-slate-400 hover:text-slate-600"><X size={24} /></button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-2 mb-6">
         <button onClick={() => setView('main')}
           className={`flex-1 py-2.5 rounded-2xl text-sm font-black transition-all ${view === 'main' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
@@ -132,7 +128,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
 
       <AnimatePresence mode="wait">
 
-        {/* ── Vue principale ── */}
         {view === 'main' && (
           <motion.div key="main" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col flex-1">
             {isPremium ? (
@@ -146,7 +141,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                   )}
                   <p className="text-slate-600 font-medium mt-2">Toutes les fonctionnalités avancées sont débloquées.</p>
                 </motion.div>
-                {/* Bouton parrainage si premium */}
                 <button onClick={() => setView('referral')}
                   className="w-full flex items-center gap-3 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
                   <div className="p-2 bg-indigo-600 rounded-xl text-white"><Users size={18} /></div>
@@ -158,7 +152,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
               </div>
             ) : (
               <>
-                {/* Features card */}
                 <div className="bg-indigo-600 p-7 rounded-[40px] text-white shadow-xl mb-6 relative overflow-hidden">
                   <div className="relative z-10">
                     <h3 className="text-xl font-bold mb-4">Pourquoi passer au Premium ?</h3>
@@ -181,7 +174,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
 
                 {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-medium mb-4">{error}</div>}
 
-                {/* Essai 7 jours — mis en avant si pas encore utilisé */}
                 {!trialUsed && (
                   <div className="bg-amber-50 border-2 border-amber-200 rounded-3xl p-5 mb-4">
                     <div className="flex items-center gap-2 mb-3">
@@ -195,19 +187,18 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                     <div className="space-y-2">
                       <button onClick={() => handleSubscribe('monthly', true)} disabled={loading}
                         className="w-full py-3 bg-amber-500 text-white rounded-2xl font-black text-sm hover:bg-amber-600 transition-all disabled:opacity-50">
-                        {loading && selectedPlan === 'monthly' ? 'Redirection…' : 'Démarrer l\'essai — Mensuel (3,49€/mois ensuite)'}
+                        {loading && selectedPlan === 'monthly' ? 'Redirection…' : "Démarrer l'essai — Mensuel (3,49€/mois ensuite)"}
                       </button>
                       <button onClick={() => handleSubscribe('yearly', true)} disabled={loading}
                         className="w-full py-3 bg-amber-400 text-white rounded-2xl font-black text-sm hover:bg-amber-500 transition-all disabled:opacity-50">
-                        {loading && selectedPlan === 'yearly' ? 'Redirection…' : 'Démarrer l\'essai — Annuel (30€/an ensuite)'}
+                        {loading && selectedPlan === 'yearly' ? 'Redirection…' : "Démarrer l'essai — Annuel (30€/an ensuite)"}
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Plans sans essai */}
                 <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">
-                  {trialUsed ? 'Choisir un abonnement' : 'Ou s\'abonner directement'}
+                  {trialUsed ? 'Choisir un abonnement' : "Ou s'abonner directement"}
                 </p>
                 <div className="space-y-3 flex-1">
                   <PlanCard title="Mensuel" price="3,49€" period="/ mois" description="Idéal pour commencer"
@@ -216,9 +207,10 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                     onClick={() => handleSubscribe('yearly')} loading={loading && selectedPlan === 'yearly'} />
                 </div>
 
-                {/* Code de parrainage */}
+                {/* Code parrainage */}
                 <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl">
-                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Tu as un code de parrainage ?</p>
+                  <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Tu as un code de parrainage ?</p>
+                  <p className="text-xs text-indigo-600 font-bold mb-3">→ Obtiens 15 jours Premium offerts au lieu de 7 !</p>
                   <div className="flex gap-2">
                     <input value={inputCode} onChange={e => setInputCode(e.target.value.toUpperCase())}
                       placeholder="Ex: A1B2C3D4" maxLength={8}
@@ -240,7 +232,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
           </motion.div>
         )}
 
-        {/* ── Vue parrainage ── */}
         {view === 'referral' && (
           <motion.div key="referral" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col flex-1">
             <div className="bg-gradient-to-br from-indigo-600 to-violet-700 p-7 rounded-3xl text-white mb-6 relative overflow-hidden">
@@ -248,7 +239,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                 <div className="text-4xl mb-3">🎁</div>
                 <h3 className="text-2xl font-black mb-2">Parrainez vos amis</h3>
                 <p className="text-sm font-medium opacity-90 leading-relaxed">
-                  Pour chaque ami qui s'inscrit avec ton code, il reçoit <strong>7 jours Premium offerts</strong>.
+                  Pour chaque ami qui s'inscrit avec ton code, il reçoit <strong>15 jours Premium offerts</strong>.
                   Toi tu gagnes <strong>1 mois offert</strong> tous les 3 filleuls.
                 </p>
               </div>
@@ -261,9 +252,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                   <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Ton code unique</p>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
-                      <p className="text-2xl font-black text-indigo-600 tracking-widest">
-                        {referralCode || '…'}
-                      </p>
+                      <p className="text-2xl font-black text-indigo-600 tracking-widest">{referralCode || '…'}</p>
                     </div>
                     <button onClick={handleCopy} className="p-4 bg-indigo-600 text-white rounded-xl active:scale-95 transition-transform">
                       {copied ? <Check size={20} /> : <Copy size={20} />}
@@ -280,10 +269,8 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                       <p className="text-xs text-slate-400 font-medium">filleul{(profile?.referralCount ?? 0) > 1 ? 's' : ''}</p>
                     </div>
                     <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-indigo-600 rounded-full transition-all"
-                        style={{ width: `${Math.min(100, ((profile?.referralCount ?? 0) % 3) / 3 * 100)}%` }}
-                      />
+                      <div className="h-full bg-indigo-600 rounded-full transition-all"
+                        style={{ width: `${Math.min(100, ((profile?.referralCount ?? 0) % 3) / 3 * 100)}%` }} />
                     </div>
                     <p className="text-xs text-slate-500 font-bold">
                       {3 - ((profile?.referralCount ?? 0) % 3)} de plus → 1 mois offert
@@ -295,8 +282,8 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                   <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">Comment ça marche</p>
                   {[
                     '1. Partage ton code unique avec tes amis',
-                    '2. Ils l\'utilisent à l\'inscription ou dans Compte',
-                    '3. Ils reçoivent 7 jours Premium gratuits',
+                    "2. Ils l'utilisent à l'inscription ou dans Compte",
+                    '3. Ils reçoivent 15 jours Premium gratuits',
                     '4. Toi tu gagnes 1 mois offert tous les 3 filleuls',
                   ].map(step => (
                     <p key={step} className="text-xs text-slate-500 font-medium py-1">{step}</p>
@@ -308,8 +295,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                 <Lock size={32} className="text-slate-300 mx-auto mb-3" />
                 <p className="text-sm font-bold text-slate-500 mb-1">Fonctionnalité Premium</p>
                 <p className="text-xs text-slate-400 mb-4">Abonne-toi pour accéder au parrainage et gagner des mois offerts.</p>
-                <button onClick={() => setView('main')}
-                  className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm">
+                <button onClick={() => setView('main')} className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm">
                   Voir les offres
                 </button>
               </div>
