@@ -32,10 +32,10 @@ export async function getMotivationalMessage(
   profile: UserProfile,
   recentBets: Bet[]
 ): Promise<string> {
-  const today = new Date();
+  const today     = new Date();
   const dayOfWeek = today.toLocaleDateString('fr', { weekday: 'long' });
-  const hour = today.getHours();
-  const moment = hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soir';
+  const hour      = today.getHours();
+  const moment    = hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soir';
   const totalPerdu = recentBets.reduce((s, b) => s + b.amount, 0);
 
   const msg = await claude(
@@ -51,7 +51,7 @@ RÈGLES ABSOLUES :
 - Utilise le prénom naturellement, pas forcément au début`,
 
     `Contexte précis sur ${profile.firstName} :
-- Streak actuel : ${profile.streakCount} jours sans pari
+- Jours sans pari : ${profile.streakCount}
 - Meilleur record : ${profile.bestStreak ?? 0} jours
 - Niveau gamification : ${profile.level} (${profile.xp} XP)
 - Argent total perdu en paris : ${totalPerdu}€
@@ -100,7 +100,7 @@ RÈGLES :
 
     `${profile.firstName} est sur le point de parier ${amount}€ maintenant.
 - C'est ${pourcentageRevenu}% de son revenu mensuel (${profile.monthlyIncome}€)
-- Il a un streak de ${streak} jours sans pari ${streak > 0 ? "— qu'il va perdre" : ''}
+- Il a ${streak} jours sans pari ${streak > 0 ? "— qu'il va perdre" : ''}
 - Ses objectifs : ${goalsList}
 - Durée d'addiction : ${profile.bettingDuration}
 
@@ -111,7 +111,7 @@ Génère un message d'intervention qui lui fait VRAIMENT réfléchir avec l'angl
 
 // ---- Message SOS mode urgence (premium) ----
 export async function getSOSMessage(profile: UserProfile): Promise<string> {
-  const hour = new Date().getHours();
+  const hour   = new Date().getHours();
   const moment = hour < 6 ? 'nuit profonde' : hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soirée';
 
   const msg = await claude(
@@ -129,7 +129,7 @@ RÈGLES ABSOLUES :
 - Rappelle que le craving dure 15-20 minutes maximum et passe toujours`,
 
     `${profile.firstName} est en MODE URGENCE maintenant (${moment}).
-- Streak en jeu : ${profile.streakCount} jours
+- Jours sans pari en jeu : ${profile.streakCount}
 - Meilleur record : ${profile.bestStreak ?? 0} jours
 - Revenu mensuel : ${profile.monthlyIncome}€
 - Durée d'addiction : ${profile.bettingDuration}
@@ -137,7 +137,6 @@ RÈGLES ABSOLUES :
 Génère un message de crise puissant qui l'aide à traverser cette vague sans parier.`,
     400
   );
-
   return msg || localSOSMessage(profile.streakCount);
 }
 
@@ -170,6 +169,43 @@ Identifie le pattern le plus important et donne un conseil pratique ultra-concre
     350
   );
   return msg || "Tes rechutes semblent suivre un pattern. Analyse les moments et émotions récurrents pour mieux les anticiper.";
+}
+
+// ---- Analyse humeur (premium) ----
+export async function getMoodAnalysis(
+  mood: string,
+  note: string,
+  profile: UserProfile,
+  recentBets: Bet[]
+): Promise<string> {
+  const moodLabels: Record<string, string> = {
+    stressed: 'stressé',
+    sad:      'déprimé',
+    neutral:  'neutre',
+    good:     'bien',
+    strong:   'fort',
+  };
+
+  const msg = await claude(
+    `Tu es un thérapeute spécialisé en addiction. Tu reçois l'humeur du jour d'un utilisateur qui lutte contre l'addiction aux jeux. Quand l'humeur est négative (stressé, déprimé), tu dois intervenir avec bienveillance pour prévenir une rechute.
+
+RÈGLES :
+- Français, "tu", uniquement le message, sans guillemets
+- 3-4 phrases maximum
+- Reconnais l'émotion d'abord
+- Donne une action concrète anti-rechute
+- Termine avec quelque chose d'encourageant`,
+
+    `${profile.firstName} se sent ${moodLabels[mood] || mood} aujourd'hui.
+Note personnelle : "${note || 'aucune'}"
+Jours sans pari : ${profile.streakCount}
+Rechutes récentes : ${recentBets.length}
+Durée d'addiction : ${profile.bettingDuration}
+
+Génère un message de soutien adapté à cette humeur pour prévenir une rechute.`,
+    300
+  );
+  return msg || `Je vois que tu te sens ${moodLabels[mood] || mood} aujourd'hui. C'est dans ces moments que le craving peut être fort — appelle quelqu'un de confiance ou ouvre le mode SOS si l'envie devient trop forte. Tu as déjà tenu ${profile.streakCount} jours, tu peux traverser ça. 💪`;
 }
 
 // ---- Fallbacks locaux ----

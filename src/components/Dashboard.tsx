@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
-  doc, updateDoc, addDoc, deleteDoc, getDoc,
+  doc, updateDoc, addDoc, deleteDoc, getDoc, setDoc,
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useFirebase } from './FirebaseProvider';
@@ -9,9 +9,9 @@ import { Bet, Goal, ALL_BADGES, getLevelMeta } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingDown, Flame, Target, Sparkles,
-  Plus, Trash2, X, Trophy, Star, Zap, Lock,
+  Plus, Trash2, X, Trophy, Star, Zap, Lock, SmilePlus,
 } from 'lucide-react';
-import { getMotivationalMessage, analyzeRelapsePattern } from '../services/aiCoach';
+import { getMotivationalMessage, analyzeRelapsePattern, getMoodAnalysis } from '../services/aiCoach';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 function getLocalMessage(jours: number): string {
@@ -20,6 +20,19 @@ function getLocalMessage(jours: number): string {
   if (jours < 30) return `${jours} jours sans pari — tu montres chaque jour que tu es plus fort. 🔥`;
   return `${jours} jours sans pari — tu es une légende vivante. Rien ne peut t'arrêter. 👑`;
 }
+
+const MOODS = [
+  { value: 'stressed',  emoji: '😤', label: 'Stressé'  },
+  { value: 'sad',       emoji: '😔', label: 'Déprimé'  },
+  { value: 'neutral',   emoji: '😐', label: 'Neutre'   },
+  { value: 'good',      emoji: '😊', label: 'Bien'     },
+  { value: 'strong',    emoji: '💪', label: 'Fort'     },
+];
+
+const MOOD_RISK: Record<string, boolean> = {
+  stressed: true,
+  sad:      true,
+};
 
 export default function Dashboard() {
   const { profile, user } = useFirebase();
@@ -32,12 +45,21 @@ export default function Dashboard() {
   const [newGoal,      setNewGoal]      = useState({ title: '', cost: '' });
   const [loading,      setLoading]      = useState(false);
 
+  // Humeur
+  const [showMoodModal,  setShowMoodModal]  = useState(false);
+  const [todayMood,      setTodayMood]      = useState<string | null>(null);
+  const [moodNote,       setMoodNote]       = useState('');
+  const [moodLoading,    setMoodLoading]    = useState(false);
+  const [moodAnalysis,   setMoodAnalysis]   = useState<string | null>(null);
+  const [recentMoods,    setRecentMoods]    = useState<{ value: string; date: string }[]>([]);
+
   const coachMsgLoadedRef = useRef<string | null>(null);
 
   const now          = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const todayStr     = now.toISOString().slice(0, 10);
 
+  // Listeners Firestore
   useEffect(() => {
     if (!user) return;
     const unsubBets = onSnapshot(
@@ -51,6 +73,30 @@ export default function Dashboard() {
     return () => { unsubBets(); unsubGoals(); };
   }, [user?.uid]);
 
+  // Charger l'humeur du jour + historique 7 jours
+  useEffect(() => {
+    if (!user) return;
+    const loadMoods = async () => {
+      try {
+        // Humeur du jour
+        const todayDoc = await getDoc(doc(db, 'users', user.uid, 'moods', todayStr));
+        if (todayDoc.exists()) setTodayMood(todayDoc.data().value);
+
+        // 7 derniers jours
+        const { getDocs } = await import('firebase/firestore');
+        const moodsSnap = await getDocs(
+          query(collection(db, 'users', user.uid, 'moods'), orderBy('date', 'desc'))
+        );
+        const moods = moodsSnap.docs
+          .slice(0, 7)
+          .map(d => ({ value: d.data().value, date: d.data().date }));
+        setRecentMoods(moods);
+      } catch {}
+    };
+    loadMoods();
+  }, [user?.uid, todayStr]);
+
+  // Coach message
   useEffect(() => {
     if (!profile || !user) return;
     const isPremium = profile.subscriptionType === 'premium';
@@ -81,9 +127,7 @@ export default function Dashboard() {
         if (cancelled) return;
         coachMsgLoadedRef.current = cacheKey;
         setCoachMsg(msg);
-        await updateDoc(doc(db, 'users', user.uid), {
-          coachMessage: msg, coachMessageDate: todayStr,
-        });
+        await updateDoc(doc(db, 'users', user.uid), { coachMessage: msg, coachMessageDate: todayStr });
       } catch {
         if (!cancelled) setCoachMsg(getLocalMessage(profile.streakCount));
       }
@@ -91,6 +135,34 @@ export default function Dashboard() {
     load();
     return () => { cancelled = true; };
   }, [user?.uid, profile?.subscriptionType, todayStr]);
+
+  const handleSaveMood = async (moodValue: string) => {
+    if (!user || !profile) return;
+    setMoodLoading(true);
+    try {
+      const note = moodNote.trim();
+      await setDoc(doc(db, 'users', user.uid, 'moods', todayStr), {
+        value:   moodValue,
+        note,
+        date:    todayStr,
+        savedAt: new Date().toISOString(),
+      });
+      setTodayMood(moodValue);
+
+      // +5 XP pour avoir rempli le journal
+      await updateDoc(doc(db, 'users', user.uid), { xp: (profile.xp ?? 0) + 5 });
+
+      // Premium + humeur à risque → analyse Claude
+      const isPremium = profile.subscriptionType === 'premium';
+      if (isPremium && MOOD_RISK[moodValue]) {
+        const analysis = await getMoodAnalysis(moodValue, note, profile, recentBets);
+        setMoodAnalysis(analysis);
+      } else {
+        setShowMoodModal(false);
+      }
+    } catch (e) { console.error(e); }
+    finally { setMoodLoading(false); }
+  };
 
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +200,7 @@ export default function Dashboard() {
   const isPremium    = profile.subscriptionType === 'premium';
   const levelMeta    = getLevelMeta(profile.xp ?? 0);
   const earnedBadges = ALL_BADGES.filter(b => (profile.badges ?? []).includes(b.id));
+  const todayMoodDef = MOODS.find(m => m.value === todayMood);
 
   const pieData    = [
     { name: 'Dépensé', value: totalSpent },
@@ -137,13 +210,11 @@ export default function Dashboard() {
   const spendColor = spendPct < 5 ? 'text-emerald-500' : spendPct < 15 ? 'text-orange-500' : 'text-red-500';
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 pb-24">
 
       {/* ── Jours sans pari ── */}
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden"
-      >
+      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden">
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-2">
             <Flame size={24} className="text-orange-400 fill-orange-400" />
@@ -157,11 +228,56 @@ export default function Dashboard() {
         <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12"><Flame size={160} /></div>
       </motion.div>
 
+      {/* ── Humeur du jour + historique 7 jours ── */}
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <SmilePlus size={18} className="text-violet-500" />
+            <p className="text-sm font-bold text-slate-900 uppercase tracking-wider">Journal d'humeur</p>
+          </div>
+          {todayMood && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">+5 XP ✓</span>}
+        </div>
+
+        {/* Humeur du jour */}
+        {todayMood ? (
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-3xl">{todayMoodDef?.emoji}</span>
+            <div>
+              <p className="font-black text-slate-900">{todayMoodDef?.label}</p>
+              <p className="text-xs text-slate-400 font-medium">Humeur d'aujourd'hui</p>
+            </div>
+            <button onClick={() => { setMoodNote(''); setMoodAnalysis(null); setShowMoodModal(true); }}
+              className="ml-auto text-xs font-bold text-indigo-600 hover:underline">
+              Modifier
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setShowMoodModal(true)}
+            className="w-full py-3 bg-violet-50 border border-violet-100 rounded-2xl text-sm font-bold text-violet-600 mb-4 hover:bg-violet-100 transition-colors">
+            + Ajouter mon humeur du jour (+5 XP)
+          </button>
+        )}
+
+        {/* Historique 7 jours */}
+        {recentMoods.length > 0 && (
+          <div className="flex gap-2 justify-between">
+            {recentMoods.slice(0, 7).map((m, i) => {
+              const def = MOODS.find(md => md.value === m.value);
+              const dayLabel = new Date(m.date).toLocaleDateString('fr', { weekday: 'short' }).slice(0, 3);
+              return (
+                <div key={i} className="flex flex-col items-center gap-1">
+                  <span className="text-lg">{def?.emoji ?? '❓'}</span>
+                  <span className="text-[10px] text-slate-400 font-medium">{dayLabel}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* ── XP / Level ── */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-        className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"
-      >
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+        className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-50 rounded-xl text-amber-500"><Star size={20} /></div>
@@ -176,11 +292,9 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }} animate={{ width: `${levelMeta.progressPercent}%` }}
+          <motion.div initial={{ width: 0 }} animate={{ width: `${levelMeta.progressPercent}%` }}
             transition={{ duration: 0.8, ease: 'easeOut' }}
-            className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full"
-          />
+            className="h-full bg-gradient-to-r from-amber-400 to-orange-500 rounded-full" />
         </div>
         {levelMeta.nextLevel && (
           <p className="text-xs text-slate-400 font-medium mt-2">
@@ -199,17 +313,14 @@ export default function Dashboard() {
           </div>
           <p className="text-slate-700 font-medium leading-relaxed italic">"{coachMsg}"</p>
           {isPremium && recentBets.length >= 2 && (
-            <button onClick={loadAnalysis}
-              className="mt-3 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
+            <button onClick={loadAnalysis} className="mt-3 text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1">
               <Sparkles size={12} /> Analyser mes rechutes
             </button>
           )}
           {!isPremium && (
             <div className="mt-3 flex items-center gap-2">
               <Lock size={12} className="text-slate-400" />
-              <p className="text-xs text-slate-400 font-medium">
-                Coach IA Claude — <span className="text-indigo-600 font-bold">Premium uniquement</span>
-              </p>
+              <p className="text-xs text-slate-400 font-medium">Coach IA Claude — <span className="text-indigo-600 font-bold">Premium uniquement</span></p>
             </div>
           )}
         </div>
@@ -218,13 +329,9 @@ export default function Dashboard() {
       {/* ── Analyse rechutes ── */}
       <AnimatePresence>
         {showAnalysis && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className="bg-violet-50 border border-violet-100 p-5 rounded-2xl relative"
-          >
-            <button onClick={() => setShowAnalysis(false)} className="absolute top-4 right-4 text-slate-400">
-              <X size={18} />
-            </button>
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="bg-violet-50 border border-violet-100 p-5 rounded-2xl relative">
+            <button onClick={() => setShowAnalysis(false)} className="absolute top-4 right-4 text-slate-400"><X size={18} /></button>
             <p className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-2">Analyse IA</p>
             <p className="text-slate-700 font-medium leading-relaxed">{analysis ?? 'Analyse en cours…'}</p>
           </motion.div>
@@ -304,9 +411,7 @@ export default function Dashboard() {
             ? <div className="text-center p-8 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
                 <p className="text-sm text-slate-400 font-medium">Aucun projet pour le moment.</p>
               </div>
-            : goals.map(g => (
-                <GoalCard key={g.id} goal={g} saved={totalSpent} onDelete={() => handleDeleteGoal(g.id)} />
-              ))
+            : goals.map(g => <GoalCard key={g.id} goal={g} saved={totalSpent} onDelete={() => handleDeleteGoal(g.id)} />)
           }
         </div>
       </div>
@@ -315,10 +420,8 @@ export default function Dashboard() {
       <AnimatePresence>
         {showAddGoal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl"
-            >
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white w-full max-w-sm rounded-[32px] p-8 shadow-2xl">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-xl font-black text-slate-900">Nouveau projet</h3>
                 <button onClick={() => setShowAddGoal(false)} className="text-slate-400"><X size={24} /></button>
@@ -345,6 +448,86 @@ export default function Dashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── Modal humeur ── */}
+      <AnimatePresence>
+        {showMoodModal && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+              className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
+
+              {moodAnalysis ? (
+                // Vue analyse Claude
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <p className="text-xs font-black text-violet-500 uppercase tracking-wider">Analyse du coach IA</p>
+                    <button onClick={() => { setShowMoodModal(false); setMoodAnalysis(null); }} className="text-slate-400"><X size={20} /></button>
+                  </div>
+                  <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-4">
+                    <p className="text-slate-700 font-medium leading-relaxed text-sm">{moodAnalysis}</p>
+                  </div>
+                  <button onClick={() => { setShowMoodModal(false); setMoodAnalysis(null); }}
+                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold">
+                    Compris, merci 💪
+                  </button>
+                </div>
+              ) : (
+                // Vue sélection humeur
+                <>
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h3 className="text-xl font-black text-slate-900">Comment tu te sens ?</h3>
+                      <p className="text-xs text-slate-400 font-medium mt-1">Journal du {new Date().toLocaleDateString('fr', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                    </div>
+                    <button onClick={() => setShowMoodModal(false)} className="text-slate-400"><X size={22} /></button>
+                  </div>
+
+                  {/* Sélecteur humeur */}
+                  <div className="flex justify-between mb-6">
+                    {MOODS.map(mood => (
+                      <button key={mood.value} onClick={() => !moodLoading && handleSaveMood(mood.value)}
+                        disabled={moodLoading}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-95 ${
+                          todayMood === mood.value ? 'bg-violet-100 ring-2 ring-violet-400' : 'hover:bg-slate-50'
+                        }`}>
+                        <span className="text-3xl">{mood.emoji}</span>
+                        <span className="text-[10px] font-bold text-slate-500">{mood.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Note optionnelle */}
+                  <div className="mb-4">
+                    <textarea value={moodNote} onChange={e => setMoodNote(e.target.value)}
+                      placeholder="Une note ? (optionnel)"
+                      rows={2}
+                      className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
+                  </div>
+
+                  {moodLoading && (
+                    <div className="flex items-center justify-center gap-2 text-violet-600">
+                      <div className="w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm font-medium">Enregistrement…</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Bouton flottant humeur ── */}
+      {!todayMood && (
+        <motion.button
+          initial={{ scale: 0 }} animate={{ scale: 1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowMoodModal(true)}
+          className="fixed bottom-24 right-4 w-14 h-14 bg-violet-600 text-white rounded-full shadow-xl flex items-center justify-center z-30"
+        >
+          <SmilePlus size={24} />
+        </motion.button>
+      )}
     </div>
   );
 }
@@ -358,21 +541,14 @@ function GoalCard({ goal, saved, onDelete }: { goal: Goal; saved: number; onDele
         <div className="flex-1">
           <div className="flex justify-between items-start">
             <p className="font-bold text-slate-900">{goal.title}</p>
-            <button onClick={onDelete} className="text-slate-300 hover:text-red-500 transition-colors">
-              <Trash2 size={16} />
-            </button>
+            <button onClick={onDelete} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
           </div>
-          <p className="text-xs text-slate-500 font-medium">
-            Potentiel perdu : {saved.toFixed(0)}€ / {goal.cost}€
-          </p>
+          <p className="text-xs text-slate-500 font-medium">Potentiel perdu : {saved.toFixed(0)}€ / {goal.cost}€</p>
         </div>
         <span className="text-sm font-black text-slate-900">{progress.toFixed(0)}%</span>
       </div>
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-        <motion.div
-          initial={{ width: 0 }} animate={{ width: `${progress}%` }}
-          className="h-full bg-indigo-500"
-        />
+        <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} className="h-full bg-indigo-500" />
       </div>
     </div>
   );
