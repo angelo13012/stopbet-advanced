@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, TrendingUp, PlusCircle, User,
-  Settings, CreditCard, LogOut, ChevronRight, Trophy,
-  AlertTriangle, AtSign, Check, X, Pencil,
+  CreditCard, LogOut, ChevronRight, Trophy,
+  AlertTriangle, AtSign, Check, X, Pencil, Bell, BellOff,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
@@ -17,23 +17,41 @@ import Subscription from './components/Subscription';
 import Leaderboard from './components/Leaderboard';
 import SOSMode from './components/SOSMode';
 import { syncStreakAndXP } from './services/streak';
+import {
+  requestNotificationPermission,
+  disableNotifications,
+  listenToForegroundMessages,
+  areNotificationsSupported,
+  areNotificationsGranted,
+} from './services/notifications';
 import { auth, db } from './services/firebase';
 
 type Tab = 'dashboard' | 'progress' | 'leaderboard' | 'log' | 'profile' | 'subscription';
 
 export default function App() {
   const { user, profile, loading, isAuthReady } = useFirebase();
-  const [activeTab,     setActiveTab]     = useState<Tab>('dashboard');
-  const [showSOS,       setShowSOS]       = useState(false);
+  const [activeTab,       setActiveTab]       = useState<Tab>('dashboard');
+  const [showSOS,         setShowSOS]         = useState(false);
   const [showPseudoModal, setShowPseudoModal] = useState(false);
+  const [notifLoading,    setNotifLoading]    = useState(false);
+  const [foregroundNotif, setForegroundNotif] = useState<{ title: string; body: string } | null>(null);
 
   useEffect(() => {
     if (user && profile) {
       syncStreakAndXP(user.uid, profile).catch(console.error);
-      // Ouvrir automatiquement le modal pseudo si pas encore défini
       if (!profile.pseudo) setShowPseudoModal(true);
     }
   }, [user?.uid, profile?.lastBetDate]);
+
+  // Écouter les notifications en foreground
+  useEffect(() => {
+    if (!user) return;
+    const unsub = listenToForegroundMessages((title, body) => {
+      setForegroundNotif({ title, body });
+      setTimeout(() => setForegroundNotif(null), 5000);
+    });
+    return unsub;
+  }, [user?.uid]);
 
   if (!isAuthReady || loading) {
     return (
@@ -48,6 +66,28 @@ export default function App() {
 
   if (!user)    return <Auth />;
   if (!profile) return <Onboarding />;
+
+  const notifEnabled   = profile.notificationsEnabled === true;
+  const notifSupported = areNotificationsSupported();
+
+  const handleToggleNotifications = async () => {
+    if (!user) return;
+    setNotifLoading(true);
+    try {
+      if (notifEnabled) {
+        await disableNotifications(user.uid);
+      } else {
+        const granted = await requestNotificationPermission(user.uid);
+        if (!granted) {
+          alert('Pour activer les notifications, autorise-les dans les paramètres de ton navigateur.');
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setNotifLoading(false);
+    }
+  };
 
   const handleResetToFree = async () => {
     if (!user) return;
@@ -67,17 +107,14 @@ export default function App() {
       case 'profile':      return (
         <div className="p-6">
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Mon profil</h2>
-          <p className="text-slate-500 font-medium mb-1">
-            {profile.firstName} {profile.lastName}
-          </p>
+          <p className="text-slate-500 font-medium mb-1">{profile.firstName} {profile.lastName}</p>
 
           {/* Pseudo */}
           <div className="flex items-center gap-2 mb-6">
             {profile.pseudo ? (
               <>
                 <p className="text-indigo-600 font-black text-sm">@{profile.pseudo}</p>
-                <button onClick={() => setShowPseudoModal(true)}
-                  className="p-1 text-slate-400 hover:text-indigo-600 transition-colors">
+                <button onClick={() => setShowPseudoModal(true)} className="p-1 text-slate-400 hover:text-indigo-600 transition-colors">
                   <Pencil size={14} />
                 </button>
               </>
@@ -89,6 +126,7 @@ export default function App() {
             )}
           </div>
 
+          {/* Stats */}
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
               { label: 'Niveau',          value: profile.level },
@@ -103,6 +141,31 @@ export default function App() {
           </div>
 
           <div className="space-y-3">
+            {/* Notifications */}
+            {notifSupported && (
+              <div className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${notifEnabled ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
+                    {notifEnabled ? <Bell size={20} /> : <BellOff size={20} />}
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-slate-900">Notifications</p>
+                    <p className="text-sm text-slate-500">
+                      {notifEnabled ? 'Activées — rappels quotidiens' : 'Désactivées'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleNotifications}
+                  disabled={notifLoading}
+                  className={`w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${notifEnabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                >
+                  <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${notifEnabled ? 'left-5' : 'left-0.5'}`} />
+                </button>
+              </div>
+            )}
+
+            {/* Classement */}
             <button onClick={() => setActiveTab('leaderboard')}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
@@ -115,6 +178,7 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
+            {/* Abonnement */}
             <button onClick={() => setActiveTab('subscription')}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
@@ -164,6 +228,25 @@ export default function App() {
           </div>
         </header>
 
+        {/* Notification foreground */}
+        <AnimatePresence>
+          {foregroundNotif && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="fixed top-20 left-4 right-4 max-w-md mx-auto z-50 bg-slate-900 text-white p-4 rounded-2xl shadow-xl flex items-start gap-3"
+            >
+              <Bell size={18} className="text-indigo-400 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold text-sm">{foregroundNotif.title}</p>
+                <p className="text-xs text-slate-300 mt-0.5">{foregroundNotif.body}</p>
+              </div>
+              <button onClick={() => setForegroundNotif(null)} className="text-slate-400">
+                <X size={16} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <main>
           <AnimatePresence mode="wait">
             <motion.div key={activeTab}
@@ -185,19 +268,14 @@ export default function App() {
           <NavBtn active={activeTab === 'profile'}     onClick={() => setActiveTab('profile')}     icon={<User size={21} />}            label="Profil" />
         </nav>
 
-        {/* ── Modal Pseudo ── */}
+        {/* Modal Pseudo */}
         <AnimatePresence>
           {showPseudoModal && user && (
-            <PseudoModal
-              currentPseudo={profile.pseudo}
-              userId={user.uid}
-              profile={profile}
-              onClose={() => setShowPseudoModal(false)}
-            />
+            <PseudoModal currentPseudo={profile.pseudo} userId={user.uid} profile={profile} onClose={() => setShowPseudoModal(false)} />
           )}
         </AnimatePresence>
 
-        {/* ── Mode SOS ── */}
+        {/* Mode SOS */}
         <AnimatePresence>
           {showSOS && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -212,75 +290,49 @@ export default function App() {
 
 // ── Modal pseudo ──
 function PseudoModal({ currentPseudo, userId, profile, onClose }: {
-  currentPseudo?: string;
-  userId: string;
-  profile: any;
-  onClose: () => void;
+  currentPseudo?: string; userId: string; profile: any; onClose: () => void;
 }) {
-  const [pseudo,   setPseudo]   = useState(currentPseudo ?? '');
-  const [error,    setError]    = useState('');
-  const [success,  setSuccess]  = useState(false);
-  const [loading,  setLoading]  = useState(false);
-  const [checking, setChecking] = useState(false);
+  const [pseudo,  setPseudo]  = useState(currentPseudo ?? '');
+  const [error,   setError]   = useState('');
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleSave = async () => {
     const cleaned = pseudo.trim().toLowerCase();
     if (cleaned.length < 3)  { setError('Au moins 3 caractères'); return; }
     if (cleaned.length > 20) { setError('Maximum 20 caractères'); return; }
     if (!/^[a-zA-Z0-9_-]+$/.test(cleaned)) { setError('Lettres, chiffres, _ et - uniquement'); return; }
-
-    setLoading(true); setError(''); setChecking(true);
+    setLoading(true); setError('');
     try {
-      // Vérifier disponibilité sauf si c'est le pseudo actuel
       if (cleaned !== currentPseudo) {
-        const snap = await getDocs(
-          query(collection(db, 'leaderboard'), where('pseudo', '==', cleaned))
-        );
-        if (!snap.empty) { setError('Ce pseudo est déjà pris'); setLoading(false); setChecking(false); return; }
+        const snap = await getDocs(query(collection(db, 'leaderboard'), where('pseudo', '==', cleaned)));
+        if (!snap.empty) { setError('Ce pseudo est déjà pris'); setLoading(false); return; }
       }
-
-      // Mettre à jour profil privé
       await updateDoc(doc(db, 'users', userId), { pseudo: cleaned });
-
-      // Mettre à jour leaderboard public
       await setDoc(doc(db, 'leaderboard', userId), {
-        pseudo:      cleaned,
-        xp:          profile.xp ?? 0,
-        streakCount: profile.streakCount ?? 0,
-        level:       profile.level ?? 1,
-        updatedAt:   new Date().toISOString(),
+        pseudo: cleaned, xp: profile.xp ?? 0, streakCount: profile.streakCount ?? 0,
+        level: profile.level ?? 1, updatedAt: new Date().toISOString(),
       }, { merge: true });
-
       setSuccess(true);
       setTimeout(onClose, 1500);
     } catch (e: any) {
       setError(e.message || 'Une erreur est survenue');
     } finally {
-      setLoading(false); setChecking(false);
+      setLoading(false);
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
-      <motion.div
-        initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 100 }}
-        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl"
-      >
+      <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h3 className="text-xl font-black text-slate-900">
-              {currentPseudo ? 'Modifier le pseudo' : 'Choisir un pseudo'}
-            </h3>
-            <p className="text-xs text-slate-400 font-medium mt-1">
-              Visible dans le classement mondial
-            </p>
+            <h3 className="text-xl font-black text-slate-900">{currentPseudo ? 'Modifier le pseudo' : 'Choisir un pseudo'}</h3>
+            <p className="text-xs text-slate-400 font-medium mt-1">Visible dans le classement mondial</p>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600">
-            <X size={22} />
-          </button>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><X size={22} /></button>
         </div>
-
         {success ? (
           <div className="flex flex-col items-center py-6">
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
@@ -293,35 +345,23 @@ function PseudoModal({ currentPseudo, userId, profile, onClose }: {
           <>
             <div className="relative mb-2">
               <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-              <input
-                type="text"
-                value={pseudo}
-                onChange={e => { setPseudo(e.target.value); setError(''); }}
-                placeholder="tonpseudo"
-                maxLength={20}
-                className={`w-full pl-12 pr-4 py-4 bg-slate-50 border rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600 ${
-                  error ? 'border-red-300' : 'border-slate-100'
-                }`}
-              />
+              <input type="text" value={pseudo} onChange={e => { setPseudo(e.target.value); setError(''); }}
+                placeholder="tonpseudo" maxLength={20}
+                className={`w-full pl-12 pr-4 py-4 bg-slate-50 border rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600 ${error ? 'border-red-300' : 'border-slate-100'}`} />
             </div>
-            {error && <p className="text-xs text-red-500 font-medium mb-3 ml-1">{error}</p>}
-            {!error && (
-              <p className="text-xs text-slate-400 font-medium mb-6 ml-1">
-                Lettres, chiffres, _ et - uniquement. Min 3, max 20 caractères.
-              </p>
-            )}
+            {error
+              ? <p className="text-xs text-red-500 font-medium mb-3 ml-1">{error}</p>
+              : <p className="text-xs text-slate-400 font-medium mb-6 ml-1">Lettres, chiffres, _ et - uniquement. Min 3, max 20 caractères.</p>
+            }
             <button onClick={handleSave} disabled={loading || !pseudo.trim()}
               className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-              {loading ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Vérification…</>
-              ) : (
-                <><Check size={18} /> Sauvegarder</>
-              )}
+              {loading
+                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Vérification…</>
+                : <><Check size={18} /> Sauvegarder</>
+              }
             </button>
             {!currentPseudo && (
-              <button onClick={onClose} className="w-full py-3 text-slate-400 font-bold text-sm mt-2">
-                Plus tard
-              </button>
+              <button onClick={onClose} className="w-full py-3 text-slate-400 font-bold text-sm mt-2">Plus tard</button>
             )}
           </>
         )}
