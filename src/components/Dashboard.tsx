@@ -48,6 +48,7 @@ export default function Dashboard() {
   // Humeur
   const [showMoodModal,  setShowMoodModal]  = useState(false);
   const [todayMood,      setTodayMood]      = useState<string | null>(null);
+  const [selectedMood,   setSelectedMood]   = useState<string | null>(null);
   const [moodNote,       setMoodNote]       = useState('');
   const [moodLoading,    setMoodLoading]    = useState(false);
   const [moodAnalysis,   setMoodAnalysis]   = useState<string | null>(null);
@@ -246,13 +247,13 @@ export default function Dashboard() {
               <p className="font-black text-slate-900">{todayMoodDef?.label}</p>
               <p className="text-xs text-slate-400 font-medium">Humeur d'aujourd'hui</p>
             </div>
-            <button onClick={() => { setMoodNote(''); setMoodAnalysis(null); setShowMoodModal(true); }}
+            <button onClick={() => { setMoodNote(''); setMoodAnalysis(null); setSelectedMood(todayMood); setShowMoodModal(true); }}
               className="ml-auto text-xs font-bold text-indigo-600 hover:underline">
               Modifier
             </button>
           </div>
         ) : (
-          <button onClick={() => setShowMoodModal(true)}
+          <button onClick={() => { setSelectedMood(null); setShowMoodModal(true); }}
             className="w-full py-3 bg-violet-50 border border-violet-100 rounded-2xl text-sm font-bold text-violet-600 mb-4 hover:bg-violet-100 transition-colors">
             + Ajouter mon humeur du jour (+5 XP)
           </button>
@@ -485,10 +486,13 @@ export default function Dashboard() {
                   {/* Sélecteur humeur */}
                   <div className="flex justify-between mb-6">
                     {MOODS.map(mood => (
-                      <button key={mood.value} onClick={() => !moodLoading && handleSaveMood(mood.value)}
+                      <button key={mood.value}
+                        onClick={() => setSelectedMood(mood.value)}
                         disabled={moodLoading}
                         className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-95 ${
-                          todayMood === mood.value ? 'bg-violet-100 ring-2 ring-violet-400' : 'hover:bg-slate-50'
+                          selectedMood === mood.value
+                            ? 'bg-violet-100 ring-2 ring-violet-400'
+                            : 'hover:bg-slate-50'
                         }`}>
                         <span className="text-3xl">{mood.emoji}</span>
                         <span className="text-[10px] font-bold text-slate-500">{mood.label}</span>
@@ -504,12 +508,16 @@ export default function Dashboard() {
                       className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
                   </div>
 
-                  {moodLoading && (
-                    <div className="flex items-center justify-center gap-2 text-violet-600">
-                      <div className="w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm font-medium">Enregistrement…</span>
-                    </div>
-                  )}
+                  {/* Bouton valider */}
+                  <button
+                    onClick={() => selectedMood && handleSaveMood(selectedMood)}
+                    disabled={!selectedMood || moodLoading}
+                    className="w-full py-4 bg-violet-600 text-white rounded-2xl font-black hover:bg-violet-700 transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+                    {moodLoading
+                      ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Enregistrement…</>
+                      : '✓ Enregistrer mon humeur'
+                    }
+                  </button>
                 </>
               )}
             </motion.div>
@@ -522,7 +530,7 @@ export default function Dashboard() {
         <motion.button
           initial={{ scale: 0 }} animate={{ scale: 1 }}
           whileTap={{ scale: 0.9 }}
-          onClick={() => setShowMoodModal(true)}
+          onClick={() => { setSelectedMood(null); setShowMoodModal(true); }}
           className="fixed bottom-24 right-4 w-14 h-14 bg-violet-600 text-white rounded-full shadow-xl flex items-center justify-center z-30"
         >
           <SmilePlus size={24} />
