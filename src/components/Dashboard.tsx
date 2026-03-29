@@ -14,11 +14,11 @@ import {
 import { getMotivationalMessage, analyzeRelapsePattern } from '../services/aiCoach';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
-function getLocalMessage(streak: number): string {
-  if (streak === 0) return "Aujourd'hui est un nouveau départ. Chaque grand voyage commence par un premier pas. 💪";
-  if (streak < 7)  return `${streak} jour${streak > 1 ? 's' : ''} déjà ! Tu bâtis quelque chose de solide. Continue !`;
-  if (streak < 30) return `${streak} jours sans pari — tu montres chaque jour que tu es plus fort. 🔥`;
-  return `${streak} jours — tu es une légende vivante. Rien ne peut t'arrêter. 👑`;
+function getLocalMessage(jours: number): string {
+  if (jours === 0) return "Aujourd'hui est un nouveau départ. Chaque grand voyage commence par un premier pas. 💪";
+  if (jours < 7)  return `${jours} jour${jours > 1 ? 's' : ''} sans pari déjà ! Tu bâtis quelque chose de solide. Continue !`;
+  if (jours < 30) return `${jours} jours sans pari — tu montres chaque jour que tu es plus fort. 🔥`;
+  return `${jours} jours sans pari — tu es une légende vivante. Rien ne peut t'arrêter. 👑`;
 }
 
 export default function Dashboard() {
@@ -32,14 +32,12 @@ export default function Dashboard() {
   const [newGoal,      setNewGoal]      = useState({ title: '', cost: '' });
   const [loading,      setLoading]      = useState(false);
 
-  // Ref pour éviter les appels Claude en double
   const coachMsgLoadedRef = useRef<string | null>(null);
 
   const now          = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const todayStr     = now.toISOString().slice(0, 10);
 
-  // ── Firestore listeners (stables, pas de recréation inutile) ──
   useEffect(() => {
     if (!user) return;
     const unsubBets = onSnapshot(
@@ -51,64 +49,48 @@ export default function Dashboard() {
       snap => setGoals(snap.docs.map(d => ({ id: d.id, ...d.data() } as Goal)))
     );
     return () => { unsubBets(); unsubGoals(); };
-  }, [user?.uid]); // Seulement quand l'uid change — pas à chaque render
+  }, [user?.uid]);
 
-  // ── Coach message — 1 appel max par jour, zéro boucle ──
   useEffect(() => {
     if (!profile || !user) return;
-
-    const isPremium  = profile.subscriptionType === 'premium';
-    const cacheKey   = `${user.uid}_${todayStr}_${isPremium ? 'premium' : 'free'}`;
-
-    // Evite de re-déclencher si déjà chargé pour aujourd'hui
+    const isPremium = profile.subscriptionType === 'premium';
+    const cacheKey  = `${user.uid}_${todayStr}_${isPremium ? 'premium' : 'free'}`;
     if (coachMsgLoadedRef.current === cacheKey) return;
-
     if (!isPremium) {
       coachMsgLoadedRef.current = cacheKey;
       setCoachMsg(getLocalMessage(profile.streakCount));
       return;
     }
-
-    // Premium — vérifier Firestore d'abord
     let cancelled = false;
     const load = async () => {
       try {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (cancelled) return;
-
         const data = userDoc.data();
         if (data?.coachMessageDate === todayStr && data?.coachMessage) {
           coachMsgLoadedRef.current = cacheKey;
           setCoachMsg(data.coachMessage);
           return;
         }
-
-        // Générer avec Claude — snapshot des bets au moment de l'appel
         const betsSnap = await import('firebase/firestore').then(({ getDocs }) =>
           getDocs(query(collection(db, 'users', user.uid, 'bets'), orderBy('date', 'desc')))
         );
         if (cancelled) return;
-
         const bets = betsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Bet));
         const msg  = await getMotivationalMessage(profile, bets);
         if (cancelled) return;
-
         coachMsgLoadedRef.current = cacheKey;
         setCoachMsg(msg);
-
-        // Sauvegarder dans Firestore — sans déclencher le listener profile
         await updateDoc(doc(db, 'users', user.uid), {
-          coachMessage:     msg,
-          coachMessageDate: todayStr,
+          coachMessage: msg, coachMessageDate: todayStr,
         });
       } catch {
         if (!cancelled) setCoachMsg(getLocalMessage(profile.streakCount));
       }
     };
-
     load();
-    return () => { cancelled = true; }; // Cleanup si le composant se démonte
-  }, [user?.uid, profile?.subscriptionType, todayStr]); // Dépendances minimales et stables
+    return () => { cancelled = true; };
+  }, [user?.uid, profile?.subscriptionType, todayStr]);
 
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -147,7 +129,7 @@ export default function Dashboard() {
   const levelMeta    = getLevelMeta(profile.xp ?? 0);
   const earnedBadges = ALL_BADGES.filter(b => (profile.badges ?? []).includes(b.id));
 
-  const pieData = [
+  const pieData    = [
     { name: 'Dépensé', value: totalSpent },
     { name: 'Restant', value: Math.max(0, profile.monthlyIncome - totalSpent) },
   ];
@@ -157,7 +139,7 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6">
 
-      {/* ── Streak ── */}
+      {/* ── Jours sans pari ── */}
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         className="bg-gradient-to-br from-indigo-600 to-violet-700 p-6 rounded-3xl text-white shadow-xl relative overflow-hidden"
@@ -165,11 +147,11 @@ export default function Dashboard() {
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-2">
             <Flame size={24} className="text-orange-400 fill-orange-400" />
-            <span className="text-sm font-bold uppercase tracking-widest opacity-80">Série actuelle</span>
+            <span className="text-sm font-bold uppercase tracking-widest opacity-80">Jours sans pari</span>
           </div>
           <h3 className="text-5xl font-black tracking-tighter mb-1">{profile.streakCount} Jours</h3>
           <p className="text-sm font-medium opacity-90">
-            Meilleur record : <span className="font-black">{profile.bestStreak ?? 0} jours</span>
+            Meilleur record : <span className="font-black">{profile.bestStreak ?? 0} jours sans pari</span>
           </p>
         </div>
         <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12"><Flame size={160} /></div>
@@ -213,9 +195,7 @@ export default function Dashboard() {
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">Message du coach</p>
-            {isPremium && (
-              <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">IA Claude</span>
-            )}
+            {isPremium && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">IA Claude</span>}
           </div>
           <p className="text-slate-700 font-medium leading-relaxed italic">"{coachMsg}"</p>
           {isPremium && recentBets.length >= 2 && (
@@ -246,9 +226,7 @@ export default function Dashboard() {
               <X size={18} />
             </button>
             <p className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-2">Analyse IA</p>
-            <p className="text-slate-700 font-medium leading-relaxed">
-              {analysis ?? 'Analyse en cours…'}
-            </p>
+            <p className="text-slate-700 font-medium leading-relaxed">{analysis ?? 'Analyse en cours…'}</p>
           </motion.div>
         )}
       </AnimatePresence>

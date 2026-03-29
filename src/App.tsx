@@ -67,9 +67,9 @@ export default function App() {
 
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
-              { label: 'Niveau', value: profile.level },
-              { label: 'XP',     value: `${profile.xp ?? 0}` },
-              { label: 'Streak', value: `${profile.streakCount}j` },
+              { label: 'Niveau',          value: profile.level },
+              { label: 'XP',              value: `${profile.xp ?? 0}` },
+              { label: 'Jours sans pari', value: `${profile.streakCount}j` },
             ].map(({ label, value }) => (
               <div key={label} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 text-center">
                 <p className="text-xl font-black text-slate-900">{value}</p>
@@ -118,7 +118,6 @@ export default function App() {
             <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">Reprenez le contrôle</p>
           </div>
           <div className="flex items-center gap-3">
-            {/* Bouton SOS dans le header */}
             <button
               onClick={() => setShowSOS(true)}
               className="flex items-center gap-1.5 bg-red-500 text-white px-3 py-1.5 rounded-full font-black text-xs uppercase tracking-wider active:scale-95 transition-transform animate-pulse"
@@ -128,7 +127,7 @@ export default function App() {
             </button>
             <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full">
               <Trophy size={16} />
-              <span className="text-sm font-bold">{profile.streakCount} jours</span>
+              <span className="text-sm font-bold">{profile.streakCount}j sans pari</span>
             </div>
           </div>
         </header>
@@ -152,21 +151,16 @@ export default function App() {
         <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-4 py-3 flex justify-around items-center z-20">
           <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}
             icon={<LayoutDashboard size={22} />} label="Accueil" />
-
           <NavBtn active={activeTab === 'progress'} onClick={() => setActiveTab('progress')}
             icon={<TrendingUp size={22} />} label="Progrès" />
-
-          {/* Bouton central — enregistrer un pari */}
           <button onClick={() => setActiveTab('log')}
             className={`p-4 rounded-full shadow-lg transition-transform active:scale-95 ${
               activeTab === 'log' ? 'bg-red-500 text-white' : 'bg-slate-900 text-white'
             }`}>
             <PlusCircle size={26} />
           </button>
-
           <NavBtn active={activeTab === 'profile'} onClick={() => setActiveTab('profile')}
             icon={<User size={22} />} label="Profil" />
-
           <NavBtn active={activeTab === 'subscription'} onClick={() => setActiveTab('subscription')}
             icon={<Settings size={22} />} label="Compte" />
         </nav>
@@ -174,11 +168,7 @@ export default function App() {
         {/* ── Mode SOS ── */}
         <AnimatePresence>
           {showSOS && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <SOSMode onClose={() => setShowSOS(false)} />
             </motion.div>
           )}

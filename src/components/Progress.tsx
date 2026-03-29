@@ -4,7 +4,10 @@ import { db } from '../services/firebase';
 import { useFirebase } from './FirebaseProvider';
 import { Bet, ALL_BADGES, getLevelMeta, LEVELS } from '../types';
 import { motion } from 'framer-motion';
-import { Trophy, TrendingUp, Calendar, Lock } from 'lucide-react';
+import { Trophy, TrendingUp, Calendar, Lock, Euro, PiggyBank } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell,
+} from 'recharts';
 
 export default function Progress() {
   const { profile, user } = useFirebase();
@@ -16,7 +19,7 @@ export default function Progress() {
       query(collection(db, 'users', user.uid, 'bets'), orderBy('date', 'desc')),
       snap => setBets(snap.docs.map(d => ({ id: d.id, ...d.data() } as Bet)))
     );
-  }, [user]);
+  }, [user?.uid]);
 
   if (!profile) return null;
 
@@ -27,11 +30,55 @@ export default function Progress() {
   const relapses   = bets.length;
   const avgAmount  = relapses > 0 ? totalSpent / relapses : 0;
 
-  // Build timeline: last 30 days
+  // ── Argent économisé grâce aux jours sans pari ──
+  // Calcul : moyenne mensuelle des paris × (jours sans pari / 30)
+  const avgMonthlyLoss = totalSpent > 0 && relapses > 0
+    ? (totalSpent / Math.max(1, Math.ceil(
+        (new Date().getTime() - new Date(profile.createdAt ?? new Date()).getTime()) / (1000 * 60 * 60 * 24 * 30)
+      )))
+    : 0;
+  const savedMoney = Math.max(0, Math.round((avgMonthlyLoss / 30) * profile.streakCount));
+
+  // ── Graphique 12 derniers mois ──
+  const monthlyData = (() => {
+    const now   = new Date();
+    const data  = [];
+    for (let i = 11; i >= 0; i--) {
+      const d     = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const end   = new Date(now.getFullYear(), now.getMonth() - i + 1, 0);
+      const label = d.toLocaleDateString('fr', { month: 'short' });
+
+      // Jours sans pari dans ce mois = jours du mois - jours avec rechute
+      const daysInMonth = end.getDate();
+      const daysWithBet = new Set(
+        bets
+          .filter(b => {
+            const bd = new Date(b.date);
+            return bd.getFullYear() === d.getFullYear() && bd.getMonth() === d.getMonth();
+          })
+          .map(b => new Date(b.date).getDate())
+      ).size;
+      const daysClean = Math.max(0, daysInMonth - daysWithBet);
+
+      // Pour le mois en cours, limiter aux jours écoulés
+      const isCurrentMonth = i === 0;
+      const daysSoFar = isCurrentMonth ? now.getDate() : daysInMonth;
+
+      data.push({
+        mois:    label,
+        jours:   isCurrentMonth ? Math.min(daysClean, daysSoFar) : daysClean,
+        total:   isCurrentMonth ? daysSoFar : daysInMonth,
+        isCurrent: isCurrentMonth,
+      });
+    }
+    return data;
+  })();
+
+  // ── Heatmap 30 jours ──
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const days: { date: Date; hasBet: boolean; amount: number }[] = [];
   for (let i = 29; i >= 0; i--) {
-    const d = new Date(today); d.setDate(today.getDate() - i);
+    const d      = new Date(today); d.setDate(today.getDate() - i);
     const dayStr = d.toISOString().slice(0, 10);
     const dayBets = bets.filter(b => b.date.slice(0, 10) === dayStr);
     days.push({ date: d, hasBet: dayBets.length > 0, amount: dayBets.reduce((s, b) => s + b.amount, 0) });
@@ -63,10 +110,10 @@ export default function Progress() {
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-2 gap-4">
         {[
-          { label: 'Meilleur streak',  value: `${profile.bestStreak ?? 0}j`, icon: '🔥' },
-          { label: 'Streak actuel',    value: `${profile.streakCount}j`,      icon: '📅' },
-          { label: 'Total dépensé',    value: `${totalSpent.toFixed(0)}€`,    icon: '💸' },
-          { label: 'Moy. par rechute', value: `${avgAmount.toFixed(0)}€`,     icon: '📊' },
+          { label: 'Meilleur record',   value: `${profile.bestStreak ?? 0}j sans pari`, icon: '🔥' },
+          { label: 'Jours sans pari',   value: `${profile.streakCount}j`,               icon: '📅' },
+          { label: 'Total perdu',       value: `${totalSpent.toFixed(0)}€`,             icon: '💸' },
+          { label: 'Moy. par rechute',  value: `${avgAmount.toFixed(0)}€`,              icon: '📊' },
         ].map(({ label, value, icon }) => (
           <div key={label} className="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
             <p className="text-2xl mb-1">{icon}</p>
@@ -76,7 +123,84 @@ export default function Progress() {
         ))}
       </div>
 
-      {/* ── 30-day heatmap ── */}
+      {/* ── Argent perdu vs économisé ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-red-50 border border-red-100 p-5 rounded-3xl">
+          <div className="flex items-center gap-2 mb-2">
+            <Euro size={16} className="text-red-500" />
+            <p className="text-xs font-black text-red-500 uppercase tracking-wider">Perdu total</p>
+          </div>
+          <p className="text-3xl font-black text-red-600">{totalSpent.toFixed(0)}€</p>
+          <p className="text-xs text-red-400 font-medium mt-1">depuis l'inscription</p>
+        </div>
+        <div className="bg-emerald-50 border border-emerald-100 p-5 rounded-3xl">
+          <div className="flex items-center gap-2 mb-2">
+            <PiggyBank size={16} className="text-emerald-500" />
+            <p className="text-xs font-black text-emerald-600 uppercase tracking-wider">Économisé</p>
+          </div>
+          <p className="text-3xl font-black text-emerald-600">~{savedMoney}€</p>
+          <p className="text-xs text-emerald-500 font-medium mt-1">grâce à tes {profile.streakCount} jours</p>
+        </div>
+      </div>
+
+      {/* Message confidentiel */}
+      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex gap-3 items-start">
+        <span className="text-lg shrink-0">🔒</span>
+        <p className="text-xs text-slate-500 font-medium leading-relaxed">
+          Tes données sont <span className="font-black text-slate-700">100% privées</span>. Personne d'autre ne voit tes chiffres. Plus tu es honnête, plus le coach peut vraiment t'aider.
+        </p>
+      </div>
+
+      {/* ── Graphique 12 mois ── */}
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp size={18} className="text-indigo-600" />
+          <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Jours sans pari — 12 mois</h4>
+        </div>
+        <div className="h-48">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={monthlyData} barSize={20}>
+              <XAxis
+                dataKey="mois"
+                tick={{ fontSize: 10, fontWeight: 600, fill: '#94a3b8' }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis hide />
+              <Tooltip
+                formatter={(value: number, _: string, props: any) =>
+                  [`${value} / ${props.payload.total} jours propres`, '']}
+                labelStyle={{ fontWeight: 700, color: '#1e293b' }}
+                contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+              />
+              <Bar dataKey="jours" radius={[6, 6, 0, 0]}>
+                {monthlyData.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={entry.isCurrent ? '#4f46e5' : entry.jours === entry.total ? '#22c55e' : '#a5b4fc'}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex gap-4 mt-2">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-green-500" />
+            <span className="text-xs text-slate-500 font-medium">Mois 100% clean</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-indigo-300" />
+            <span className="text-xs text-slate-500 font-medium">Jours propres</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-indigo-600" />
+            <span className="text-xs text-slate-500 font-medium">Mois actuel</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Heatmap 30 jours ── */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center gap-2 mb-4">
           <Calendar size={18} className="text-indigo-600" />
@@ -89,18 +213,18 @@ export default function Progress() {
               initial={{ scale: 0 }} animate={{ scale: 1 }}
               transition={{ delay: i * 0.01 }}
               title={`${d.date.toLocaleDateString('fr')}${d.hasBet ? ` — ${d.amount}€ pariés` : ' — Jour propre'}`}
-              className={`aspect-square rounded-md cursor-default ${
-                d.hasBet ? 'bg-red-400' : 'bg-emerald-400'
-              }`}
+              className={`aspect-square rounded-md cursor-default ${d.hasBet ? 'bg-red-400' : 'bg-emerald-400'}`}
             />
           ))}
         </div>
         <div className="flex gap-4 mt-3">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-emerald-400" /><span className="text-xs text-slate-500 font-medium">Jour propre</span>
+            <div className="w-3 h-3 rounded bg-emerald-400" />
+            <span className="text-xs text-slate-500 font-medium">Jour propre</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-red-400" /><span className="text-xs text-slate-500 font-medium">Rechute</span>
+            <div className="w-3 h-3 rounded bg-red-400" />
+            <span className="text-xs text-slate-500 font-medium">Rechute</span>
           </div>
         </div>
       </div>
@@ -115,13 +239,10 @@ export default function Progress() {
           {ALL_BADGES.map(badge => {
             const earned = earnedIds.includes(badge.id);
             return (
-              <motion.div
-                key={badge.id}
+              <motion.div key={badge.id}
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
-                  earned
-                    ? 'bg-amber-50 border-amber-100'
-                    : 'bg-slate-50 border-slate-100 opacity-50'
+                  earned ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100 opacity-50'
                 }`}
               >
                 <span className="text-2xl">{earned ? badge.emoji : '🔒'}</span>
@@ -143,7 +264,7 @@ export default function Progress() {
         </div>
         <div className="space-y-2">
           {LEVELS.map(lvl => {
-            const reached  = (profile.xp ?? 0) >= lvl.minXP;
+            const reached   = (profile.xp ?? 0) >= lvl.minXP;
             const isCurrent = lvl.level === levelMeta.level;
             return (
               <div key={lvl.level} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
@@ -165,7 +286,7 @@ export default function Progress() {
         </div>
       </div>
 
-      {/* ── Relapse history (premium) ── */}
+      {/* ── Historique rechutes ── */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
         <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">Historique des rechutes</h4>
         {!isPremium && bets.length > 3 ? (
@@ -191,7 +312,7 @@ export default function Progress() {
                   {bet.reason && <p className="text-xs text-slate-500 mt-0.5 italic">"{bet.reason}"</p>}
                   {bet.timeOfDay && (
                     <p className="text-xs text-slate-400 font-medium mt-0.5">
-                      {{morning:'Matin',afternoon:'Après-midi',evening:'Soirée',night:'Nuit'}[bet.timeOfDay]}
+                      {{ morning:'Matin', afternoon:'Après-midi', evening:'Soirée', night:'Nuit' }[bet.timeOfDay]}
                     </p>
                   )}
                 </div>
