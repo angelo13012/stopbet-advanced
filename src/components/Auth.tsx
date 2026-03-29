@@ -13,8 +13,8 @@ type View = 'login' | 'register' | 'forgot';
 function LogoSB() {
   return (
     <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="32" cy="32" r="30" fill="#0f172a"/>
-      <circle cx="32" cy="32" r="25" fill="none" stroke="#4f46e5" strokeWidth="2.5"/>
+      <rect x="0" y="0" width="64" height="64" rx="14" fill="#0f172a"/>
+      <rect x="0" y="0" width="64" height="64" rx="14" fill="none" stroke="#4f46e5" strokeWidth="2.5"/>
       <text
         x="32" y="39"
         fontFamily="system-ui, -apple-system, sans-serif"
@@ -24,7 +24,6 @@ function LogoSB() {
         textAnchor="middle"
         letterSpacing="-1"
       >SB</text>
-      <line x1="14" y1="50" x2="50" y2="14" stroke="#ef4444" strokeWidth="3.5" strokeLinecap="round"/>
     </svg>
   );
 }
