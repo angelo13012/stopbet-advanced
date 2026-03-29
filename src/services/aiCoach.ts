@@ -78,12 +78,11 @@ export async function getInterventionMessage(
   const pourcentageRevenu = ((amount / profile.monthlyIncome) * 100).toFixed(1);
   const streak = profile.streakCount;
 
-  // Choisir un angle d'attaque différent selon le contexte
   const angles = [
     'financier concret',
     'psychologique sur le mécanisme du craving',
     'sur les objectifs de vie',
-    'sur la fierté et l\'identité',
+    "sur la fierté et l'identité",
     'sur ce que tu vas ressentir après',
   ];
   const angle = angles[Math.floor(Math.random() * angles.length)];
@@ -101,13 +100,45 @@ RÈGLES :
 
     `${profile.firstName} est sur le point de parier ${amount}€ maintenant.
 - C'est ${pourcentageRevenu}% de son revenu mensuel (${profile.monthlyIncome}€)
-- Il a un streak de ${streak} jours sans pari ${streak > 0 ? '— qu\'il va perdre' : ''}
+- Il a un streak de ${streak} jours sans pari ${streak > 0 ? "— qu'il va perdre" : ''}
 - Ses objectifs : ${goalsList}
 - Durée d'addiction : ${profile.bettingDuration}
 
 Génère un message d'intervention qui lui fait VRAIMENT réfléchir avec l'angle : ${angle}.`
   );
   return msg || localIntervention(amount, goals);
+}
+
+// ---- Message SOS mode urgence (premium) ----
+export async function getSOSMessage(profile: UserProfile): Promise<string> {
+  const hour = new Date().getHours();
+  const moment = hour < 6 ? 'nuit profonde' : hour < 12 ? 'matin' : hour < 18 ? 'après-midi' : 'soirée';
+
+  const msg = await claude(
+    `Tu es un thérapeute spécialisé en addiction aux jeux, disponible 24h/24 pour les moments de crise intense.
+Cette personne vient d'activer le MODE SOS — elle ressent une envie intense et incontrôlable de parier RIGHT NOW.
+C'est le moment le plus critique. Tu dois l'aider à traverser cette vague de craving.
+
+RÈGLES ABSOLUES :
+- Français, "tu", bienveillant mais FERME
+- UNIQUEMENT le message, sans guillemets ni préfixe
+- 3-4 phrases — plus long qu'habituellement car c'est une urgence
+- Commence par reconnaître la douleur de ce moment
+- Utilise une technique thérapeutique : STOP (Stop, Take a breath, Observe, Proceed) ou surf du craving
+- Termine avec quelque chose d'ancré dans le concret (une action immédiate)
+- Rappelle que le craving dure 15-20 minutes maximum et passe toujours`,
+
+    `${profile.firstName} est en MODE URGENCE maintenant (${moment}).
+- Streak en jeu : ${profile.streakCount} jours
+- Meilleur record : ${profile.bestStreak ?? 0} jours
+- Revenu mensuel : ${profile.monthlyIncome}€
+- Durée d'addiction : ${profile.bettingDuration}
+
+Génère un message de crise puissant qui l'aide à traverser cette vague sans parier.`,
+    400
+  );
+
+  return msg || localSOSMessage(profile.streakCount);
 }
 
 // ---- Analyse des rechutes (premium) ----
@@ -141,14 +172,8 @@ Identifie le pattern le plus important et donne un conseil pratique ultra-concre
   return msg || "Tes rechutes semblent suivre un pattern. Analyse les moments et émotions récurrents pour mieux les anticiper.";
 }
 
-// ---- Fallbacks locaux (utilisateurs free) ----
+// ---- Fallbacks locaux ----
 function localMotivation(streak: number): string {
-  const messages = [
-    `Chaque jour sans pari est une décision que tu ne regretteras jamais.`,
-    `Tu es en train de réécrire ton histoire. Continue.`,
-    `La liberté financière commence par un seul jour à la fois.`,
-    `Ce que tu construis aujourd'hui, personne ne peut te l'enlever.`,
-  ];
   if (streak === 0) return "Aujourd'hui est un nouveau départ. Le premier pas est toujours le plus courageux. 💪";
   if (streak < 7)  return `${streak} jour${streak > 1 ? 's' : ''} — tu prouve chaque matin que tu es capable de changer.`;
   if (streak < 30) return `${streak} jours sans pari. C'est réel, c'est toi, c'est maintenant. 🔥`;
@@ -167,4 +192,8 @@ function localIntervention(amount: number, goals: Goal[]): string {
     `${Math.floor(amount / 10)} sorties cinéma`,
   ];
   return `${amount}€ c'est ${equivalents[Math.floor(Math.random() * equivalents.length)]}. Est-ce que ce pari vaut vraiment ça ?`;
+}
+
+function localSOSMessage(streak: number): string {
+  return `Cette envie que tu ressens là, elle est réelle et intense — mais elle va passer. Le craving dure toujours moins de 20 minutes, même s'il semble insurmontable. ${streak > 0 ? `Tu as tenu ${streak} jour${streak > 1 ? 's' : ''} — c'est la preuve que tu en es capable.` : "Chaque seconde de résistance compte."} Lève-toi, bois un verre d'eau froide, et marche 2 minutes — ton cerveau a besoin d'un reset physique maintenant.`;
 }

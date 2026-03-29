@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   LayoutDashboard, TrendingUp, PlusCircle, User,
-  Settings, CreditCard, LogOut, ChevronRight, Trophy,
+  Settings, CreditCard, LogOut, ChevronRight, Trophy, AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -13,6 +13,7 @@ import Dashboard from './components/Dashboard';
 import BetLogger from './components/BetLogger';
 import Progress from './components/Progress';
 import Subscription from './components/Subscription';
+import SOSMode from './components/SOSMode';
 import { syncStreakAndXP } from './services/streak';
 import { auth, db } from './services/firebase';
 
@@ -21,6 +22,7 @@ type Tab = 'dashboard' | 'progress' | 'log' | 'profile' | 'subscription';
 export default function App() {
   const { user, profile, loading, isAuthReady } = useFirebase();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [showSOS,   setShowSOS]   = useState(false);
 
   useEffect(() => {
     if (user && profile) {
@@ -42,10 +44,10 @@ export default function App() {
   if (!user)    return <Auth />;
   if (!profile) return <Onboarding />;
 
-  const handleResetTofree = async () => {
+  const handleResetToFree = async () => {
     if (!user) return;
     await updateDoc(doc(db, 'users', user.uid), {
-      subscriptionType: 'free',
+      subscriptionType:   'free',
       subscriptionStatus: 'active',
     });
   };
@@ -65,7 +67,7 @@ export default function App() {
 
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
-              { label: 'Niveau',  value: profile.level },
+              { label: 'Niveau', value: profile.level },
               { label: 'XP',     value: `${profile.xp ?? 0}` },
               { label: 'Streak', value: `${profile.streakCount}j` },
             ].map(({ label, value }) => (
@@ -89,7 +91,7 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
-            <button onClick={handleResetTofree}
+            <button onClick={handleResetToFree}
               className="w-full flex items-center gap-3 p-4 bg-orange-50 text-orange-600 rounded-2xl font-semibold">
               <CreditCard size={20} /> Passer en Free (test)
             </button>
@@ -109,17 +111,29 @@ export default function App() {
     <ErrorBoundary>
       <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto relative shadow-2xl">
 
+        {/* ── Header ── */}
         <header className="p-6 bg-white border-b border-slate-100 flex justify-between items-center sticky top-0 z-10">
           <div>
             <h1 className="text-2xl font-black text-indigo-600 tracking-tighter">StopBet</h1>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">Reprenez le contrôle</p>
           </div>
-          <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full">
-            <Trophy size={16} />
-            <span className="text-sm font-bold">{profile.streakCount} jours</span>
+          <div className="flex items-center gap-3">
+            {/* Bouton SOS dans le header */}
+            <button
+              onClick={() => setShowSOS(true)}
+              className="flex items-center gap-1.5 bg-red-500 text-white px-3 py-1.5 rounded-full font-black text-xs uppercase tracking-wider active:scale-95 transition-transform animate-pulse"
+            >
+              <AlertTriangle size={13} />
+              SOS
+            </button>
+            <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full">
+              <Trophy size={16} />
+              <span className="text-sm font-bold">{profile.streakCount} jours</span>
+            </div>
           </div>
         </header>
 
+        {/* ── Content ── */}
         <main>
           <AnimatePresence mode="wait">
             <motion.div
@@ -134,6 +148,7 @@ export default function App() {
           </AnimatePresence>
         </main>
 
+        {/* ── Bottom nav ── */}
         <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-4 py-3 flex justify-around items-center z-20">
           <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}
             icon={<LayoutDashboard size={22} />} label="Accueil" />
@@ -141,6 +156,7 @@ export default function App() {
           <NavBtn active={activeTab === 'progress'} onClick={() => setActiveTab('progress')}
             icon={<TrendingUp size={22} />} label="Progrès" />
 
+          {/* Bouton central — enregistrer un pari */}
           <button onClick={() => setActiveTab('log')}
             className={`p-4 rounded-full shadow-lg transition-transform active:scale-95 ${
               activeTab === 'log' ? 'bg-red-500 text-white' : 'bg-slate-900 text-white'
@@ -154,6 +170,19 @@ export default function App() {
           <NavBtn active={activeTab === 'subscription'} onClick={() => setActiveTab('subscription')}
             icon={<Settings size={22} />} label="Compte" />
         </nav>
+
+        {/* ── Mode SOS ── */}
+        <AnimatePresence>
+          {showSOS && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <SOSMode onClose={() => setShowSOS(false)} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </ErrorBoundary>
   );
