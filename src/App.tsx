@@ -3,6 +3,7 @@ import {
   LayoutDashboard, TrendingUp, PlusCircle, User,
   CreditCard, LogOut, ChevronRight, Trophy,
   AlertTriangle, AtSign, Check, X, Pencil, Bell, BellOff,
+  Phone, Plus, Trash2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
@@ -22,19 +23,20 @@ import {
   disableNotifications,
   listenToForegroundMessages,
   areNotificationsSupported,
-  areNotificationsGranted,
 } from './services/notifications';
 import { auth, db } from './services/firebase';
+import { EmergencyContact } from './types';
 
 type Tab = 'dashboard' | 'progress' | 'leaderboard' | 'log' | 'profile' | 'subscription';
 
 export default function App() {
   const { user, profile, loading, isAuthReady } = useFirebase();
-  const [activeTab,       setActiveTab]       = useState<Tab>('dashboard');
-  const [showSOS,         setShowSOS]         = useState(false);
-  const [showPseudoModal, setShowPseudoModal] = useState(false);
-  const [notifLoading,    setNotifLoading]    = useState(false);
-  const [foregroundNotif, setForegroundNotif] = useState<{ title: string; body: string } | null>(null);
+  const [activeTab,         setActiveTab]         = useState<Tab>('dashboard');
+  const [showSOS,           setShowSOS]           = useState(false);
+  const [showPseudoModal,   setShowPseudoModal]   = useState(false);
+  const [showContactsModal, setShowContactsModal] = useState(false);
+  const [notifLoading,      setNotifLoading]      = useState(false);
+  const [foregroundNotif,   setForegroundNotif]   = useState<{ title: string; body: string } | null>(null);
 
   useEffect(() => {
     if (user && profile) {
@@ -43,7 +45,6 @@ export default function App() {
     }
   }, [user?.uid, profile?.lastBetDate]);
 
-  // Écouter les notifications en foreground
   useEffect(() => {
     if (!user) return;
     const unsub = listenToForegroundMessages((title, body) => {
@@ -78,23 +79,15 @@ export default function App() {
         await disableNotifications(user.uid);
       } else {
         const granted = await requestNotificationPermission(user.uid);
-        if (!granted) {
-          alert('Pour activer les notifications, autorise-les dans les paramètres de ton navigateur.');
-        }
+        if (!granted) alert('Pour activer les notifications, autorise-les dans les paramètres de ton navigateur.');
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setNotifLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setNotifLoading(false); }
   };
 
   const handleResetToFree = async () => {
     if (!user) return;
-    await updateDoc(doc(db, 'users', user.uid), {
-      subscriptionType:   'free',
-      subscriptionStatus: 'active',
-    });
+    await updateDoc(doc(db, 'users', user.uid), { subscriptionType: 'free', subscriptionStatus: 'active' });
   };
 
   const renderContent = () => {
@@ -109,7 +102,6 @@ export default function App() {
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Mon profil</h2>
           <p className="text-slate-500 font-medium mb-1">{profile.firstName} {profile.lastName}</p>
 
-          {/* Pseudo */}
           <div className="flex items-center gap-2 mb-6">
             {profile.pseudo ? (
               <>
@@ -126,7 +118,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
               { label: 'Niveau',          value: profile.level },
@@ -141,6 +132,24 @@ export default function App() {
           </div>
 
           <div className="space-y-3">
+
+            {/* Contacts d'urgence */}
+            <button onClick={() => setShowContactsModal(true)}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-50 rounded-lg text-red-500"><Phone size={20} /></div>
+                <div className="text-left">
+                  <p className="font-semibold text-slate-900">Contacts d'urgence</p>
+                  <p className="text-sm text-slate-500">
+                    {(profile.emergencyContacts ?? []).length > 0
+                      ? `${profile.emergencyContacts!.length} contact${profile.emergencyContacts!.length > 1 ? 's' : ''} configuré${profile.emergencyContacts!.length > 1 ? 's' : ''}`
+                      : 'Ajouter des proches à appeler en cas de crise'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight size={20} className="text-slate-400" />
+            </button>
+
             {/* Notifications */}
             {notifSupported && (
               <div className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
@@ -150,16 +159,11 @@ export default function App() {
                   </div>
                   <div className="text-left">
                     <p className="font-semibold text-slate-900">Notifications</p>
-                    <p className="text-sm text-slate-500">
-                      {notifEnabled ? 'Activées — rappels quotidiens' : 'Désactivées'}
-                    </p>
+                    <p className="text-sm text-slate-500">{notifEnabled ? 'Activées — rappels quotidiens' : 'Désactivées'}</p>
                   </div>
                 </div>
-                <button
-                  onClick={handleToggleNotifications}
-                  disabled={notifLoading}
-                  className={`w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${notifEnabled ? 'bg-emerald-500' : 'bg-slate-200'}`}
-                >
+                <button onClick={handleToggleNotifications} disabled={notifLoading}
+                  className={`w-12 h-7 rounded-full transition-colors relative disabled:opacity-50 ${notifEnabled ? 'bg-emerald-500' : 'bg-slate-200'}`}>
                   <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-all ${notifEnabled ? 'left-5' : 'left-0.5'}`} />
                 </button>
               </div>
@@ -231,18 +235,14 @@ export default function App() {
         {/* Notification foreground */}
         <AnimatePresence>
           {foregroundNotif && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
-              className="fixed top-20 left-4 right-4 max-w-md mx-auto z-50 bg-slate-900 text-white p-4 rounded-2xl shadow-xl flex items-start gap-3"
-            >
+            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="fixed top-20 left-4 right-4 max-w-md mx-auto z-50 bg-slate-900 text-white p-4 rounded-2xl shadow-xl flex items-start gap-3">
               <Bell size={18} className="text-indigo-400 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-bold text-sm">{foregroundNotif.title}</p>
                 <p className="text-xs text-slate-300 mt-0.5">{foregroundNotif.body}</p>
               </div>
-              <button onClick={() => setForegroundNotif(null)} className="text-slate-400">
-                <X size={16} />
-              </button>
+              <button onClick={() => setForegroundNotif(null)} className="text-slate-400"><X size={16} /></button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -275,6 +275,17 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* Modal Contacts d'urgence */}
+        <AnimatePresence>
+          {showContactsModal && user && (
+            <ContactsModal
+              contacts={profile.emergencyContacts ?? []}
+              userId={user.uid}
+              onClose={() => setShowContactsModal(false)}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Mode SOS */}
         <AnimatePresence>
           {showSOS && (
@@ -285,6 +296,109 @@ export default function App() {
         </AnimatePresence>
       </div>
     </ErrorBoundary>
+  );
+}
+
+// ── Modal contacts d'urgence ──
+function ContactsModal({ contacts, userId, onClose }: {
+  contacts: EmergencyContact[]; userId: string; onClose: () => void;
+}) {
+  const [list,    setList]    = useState<EmergencyContact[]>(contacts);
+  const [name,    setName]    = useState('');
+  const [phone,   setPhone]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const handleAdd = () => {
+    if (!name.trim() || !phone.trim()) return;
+    setList(prev => [...prev, { name: name.trim(), phone: phone.trim() }]);
+    setName(''); setPhone('');
+  };
+
+  const handleRemove = (i: number) => setList(prev => prev.filter((_, idx) => idx !== i));
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'users', userId), { emergencyContacts: list });
+      setSuccess(true);
+      setTimeout(onClose, 1500);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
+      <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
+
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">Contacts d'urgence</h3>
+            <p className="text-xs text-slate-400 font-medium mt-1">Accessibles en un tap dans le mode SOS</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><X size={22} /></button>
+        </div>
+
+        {success ? (
+          <div className="flex flex-col items-center py-6">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+              <Check size={32} className="text-emerald-600" />
+            </div>
+            <p className="font-black text-slate-900">Contacts sauvegardés !</p>
+          </div>
+        ) : (
+          <>
+            {/* Liste des contacts */}
+            <div className="space-y-2 mb-6">
+              {list.length === 0 ? (
+                <p className="text-sm text-slate-400 font-medium text-center py-4">Aucun contact encore ajouté</p>
+              ) : (
+                list.map((c, i) => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                      <Phone size={16} className="text-red-500" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-slate-900 text-sm">{c.name}</p>
+                      <p className="text-xs text-slate-400 font-medium">{c.phone}</p>
+                    </div>
+                    <button onClick={() => handleRemove(i)} className="text-slate-300 hover:text-red-500 transition-colors">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Ajouter un contact */}
+            {list.length < 5 && (
+              <div className="space-y-3 mb-6">
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Ajouter un contact</p>
+                <input type="text" placeholder="Prénom (ex: Maman)" value={name}
+                  onChange={e => setName(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-400" />
+                <input type="tel" placeholder="Numéro (ex: 0612345678)" value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-400" />
+                <button onClick={handleAdd} disabled={!name.trim() || !phone.trim()}
+                  className="w-full py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40">
+                  <Plus size={16} /> Ajouter
+                </button>
+              </div>
+            )}
+
+            <button onClick={handleSave} disabled={loading}
+              className="w-full py-4 bg-red-500 text-white rounded-2xl font-black hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              {loading
+                ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sauvegarde…</>
+                : <><Check size={18} /> Sauvegarder</>
+              }
+            </button>
+          </>
+        )}
+      </motion.div>
+    </div>
   );
 }
 
@@ -317,9 +431,7 @@ function PseudoModal({ currentPseudo, userId, profile, onClose }: {
       setTimeout(onClose, 1500);
     } catch (e: any) {
       setError(e.message || 'Une erreur est survenue');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (

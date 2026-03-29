@@ -1,4 +1,9 @@
 // ---- User ----
+export interface EmergencyContact {
+  name: string;
+  phone: string;
+}
+
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -36,6 +41,13 @@ export interface UserProfile {
   // Coach IA cache
   coachMessage?: string;
   coachMessageDate?: string;
+
+  // Contacts d'urgence
+  emergencyContacts?: EmergencyContact[];
+
+  // Notifications
+  fcmToken?: string;
+  notificationsEnabled?: boolean;
 
   // Meta
   createdAt: string;
