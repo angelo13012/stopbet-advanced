@@ -13,11 +13,12 @@ import Dashboard from './components/Dashboard';
 import BetLogger from './components/BetLogger';
 import Progress from './components/Progress';
 import Subscription from './components/Subscription';
+import Leaderboard from './components/Leaderboard';
 import SOSMode from './components/SOSMode';
 import { syncStreakAndXP } from './services/streak';
 import { auth, db } from './services/firebase';
 
-type Tab = 'dashboard' | 'progress' | 'log' | 'profile' | 'subscription';
+type Tab = 'dashboard' | 'progress' | 'leaderboard' | 'log' | 'profile' | 'subscription';
 
 export default function App() {
   const { user, profile, loading, isAuthReady } = useFirebase();
@@ -56,14 +57,18 @@ export default function App() {
     switch (activeTab) {
       case 'dashboard':    return <Dashboard />;
       case 'progress':     return <Progress />;
+      case 'leaderboard':  return <Leaderboard />;
       case 'log':          return <BetLogger onComplete={() => setActiveTab('dashboard')} />;
       case 'subscription': return <Subscription onComplete={() => setActiveTab('profile')} />;
       case 'profile':      return (
         <div className="p-6">
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Mon profil</h2>
-          <p className="text-slate-500 font-medium mb-6">
+          <p className="text-slate-500 font-medium mb-1">
             {profile.firstName} {profile.lastName}
           </p>
+          {profile.pseudo && (
+            <p className="text-indigo-600 font-black text-sm mb-6">@{profile.pseudo}</p>
+          )}
 
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
@@ -79,6 +84,19 @@ export default function App() {
           </div>
 
           <div className="space-y-3">
+            {/* Classement */}
+            <button onClick={() => setActiveTab('leaderboard')}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-50 rounded-lg text-amber-500"><Trophy size={20} /></div>
+                <div className="text-left">
+                  <p className="font-semibold text-slate-900">Classement</p>
+                  <p className="text-sm text-slate-500">Voir ma position mondiale</p>
+                </div>
+              </div>
+              <ChevronRight size={20} className="text-slate-400" />
+            </button>
+
             <button onClick={() => setActiveTab('subscription')}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
@@ -147,22 +165,22 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        {/* ── Bottom nav ── */}
-        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-4 py-3 flex justify-around items-center z-20">
+        {/* ── Bottom nav — 5 boutons ── */}
+        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-2 py-3 flex justify-around items-center z-20">
           <NavBtn active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')}
-            icon={<LayoutDashboard size={22} />} label="Accueil" />
+            icon={<LayoutDashboard size={21} />} label="Accueil" />
           <NavBtn active={activeTab === 'progress'} onClick={() => setActiveTab('progress')}
-            icon={<TrendingUp size={22} />} label="Progrès" />
+            icon={<TrendingUp size={21} />} label="Progrès" />
           <button onClick={() => setActiveTab('log')}
             className={`p-4 rounded-full shadow-lg transition-transform active:scale-95 ${
               activeTab === 'log' ? 'bg-red-500 text-white' : 'bg-slate-900 text-white'
             }`}>
-            <PlusCircle size={26} />
+            <PlusCircle size={24} />
           </button>
+          <NavBtn active={activeTab === 'leaderboard'} onClick={() => setActiveTab('leaderboard')}
+            icon={<Trophy size={21} />} label="Classement" />
           <NavBtn active={activeTab === 'profile'} onClick={() => setActiveTab('profile')}
-            icon={<User size={22} />} label="Profil" />
-          <NavBtn active={activeTab === 'subscription'} onClick={() => setActiveTab('subscription')}
-            icon={<Settings size={22} />} label="Compte" />
+            icon={<User size={21} />} label="Profil" />
         </nav>
 
         {/* ── Mode SOS ── */}
