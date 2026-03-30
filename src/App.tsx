@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, PlusCircle, User,
   CreditCard, LogOut, ChevronRight, Trophy,
   AlertTriangle, AtSign, Check, X, Pencil, Bell, BellOff,
-  Phone, Plus, Trash2,
+  Phone, Plus, Trash2, ShieldOff, ExternalLink,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
@@ -29,14 +29,28 @@ import { EmergencyContact } from './types';
 
 type Tab = 'dashboard' | 'progress' | 'leaderboard' | 'log' | 'profile' | 'subscription';
 
+const PLATFORMS = [
+  { id: 'winamax',      name: 'Winamax',        url: 'https://www.winamax.fr/compte/auto-exclusion' },
+  { id: 'betclic',      name: 'Betclic',         url: 'https://www.betclic.fr/fr-fr/account/responsible-gaming' },
+  { id: 'pmu',          name: 'PMU',             url: 'https://www.pmu.fr/turf/static/aide/auto-exclusion.html' },
+  { id: 'unibet',       name: 'Unibet',          url: 'https://www.unibet.fr/aide/jeu-responsable/auto-exclusion' },
+  { id: 'zebet',        name: 'ZEbet',           url: 'https://www.zebet.fr/fr/responsible-gaming' },
+  { id: 'bwin',         name: 'Bwin',            url: 'https://sports.bwin.fr/fr/sports/responsible-gaming' },
+  { id: 'parionssport', name: 'Parions Sport',   url: 'https://enligne.parionssport.fdj.fr/jeu-responsable' },
+  { id: 'feelingbet',   name: 'Feelingbet',      url: 'https://www.feelingbet.fr/jeu-responsable' },
+  { id: 'vbet',         name: 'Vbet',            url: 'https://www.vbet.fr/responsible-gambling' },
+  { id: 'netbet',       name: 'NetBet',          url: 'https://www.netbet.fr/jeu-responsable' },
+];
+
 export default function App() {
   const { user, profile, loading, isAuthReady } = useFirebase();
-  const [activeTab,         setActiveTab]         = useState<Tab>('dashboard');
-  const [showSOS,           setShowSOS]           = useState(false);
-  const [showPseudoModal,   setShowPseudoModal]   = useState(false);
-  const [showContactsModal, setShowContactsModal] = useState(false);
-  const [notifLoading,      setNotifLoading]      = useState(false);
-  const [foregroundNotif,   setForegroundNotif]   = useState<{ title: string; body: string } | null>(null);
+  const [activeTab,           setActiveTab]           = useState<Tab>('dashboard');
+  const [showSOS,             setShowSOS]             = useState(false);
+  const [showPseudoModal,     setShowPseudoModal]     = useState(false);
+  const [showContactsModal,   setShowContactsModal]   = useState(false);
+  const [showPlatformsModal,  setShowPlatformsModal]  = useState(false);
+  const [notifLoading,        setNotifLoading]        = useState(false);
+  const [foregroundNotif,     setForegroundNotif]     = useState<{ title: string; body: string } | null>(null);
 
   useEffect(() => {
     if (user && profile) {
@@ -68,8 +82,9 @@ export default function App() {
   if (!user)    return <Auth />;
   if (!profile) return <Onboarding />;
 
-  const notifEnabled   = profile.notificationsEnabled === true;
-  const notifSupported = areNotificationsSupported();
+  const notifEnabled    = profile.notificationsEnabled === true;
+  const notifSupported  = areNotificationsSupported();
+  const savedPlatforms  = (profile as any).platforms ?? [];
 
   const handleToggleNotifications = async () => {
     if (!user) return;
@@ -132,6 +147,23 @@ export default function App() {
           </div>
 
           <div className="space-y-3">
+
+            {/* Plateformes de paris */}
+            <button onClick={() => setShowPlatformsModal(true)}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-50 rounded-lg text-orange-500"><ShieldOff size={20} /></div>
+                <div className="text-left">
+                  <p className="font-semibold text-slate-900">Mes plateformes de paris</p>
+                  <p className="text-sm text-slate-500">
+                    {savedPlatforms.length > 0
+                      ? `${savedPlatforms.length} plateforme${savedPlatforms.length > 1 ? 's' : ''} — liens d'auto-exclusion`
+                      : 'Gérer mes inscriptions et m\'auto-exclure'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight size={20} className="text-slate-400" />
+            </button>
 
             {/* Contacts d'urgence */}
             <button onClick={() => setShowContactsModal(true)}
@@ -232,7 +264,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* Notification foreground */}
         <AnimatePresence>
           {foregroundNotif && (
             <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
@@ -275,14 +306,17 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Modal Contacts d'urgence */}
+        {/* Modal Contacts */}
         <AnimatePresence>
           {showContactsModal && user && (
-            <ContactsModal
-              contacts={profile.emergencyContacts ?? []}
-              userId={user.uid}
-              onClose={() => setShowContactsModal(false)}
-            />
+            <ContactsModal contacts={profile.emergencyContacts ?? []} userId={user.uid} onClose={() => setShowContactsModal(false)} />
+          )}
+        </AnimatePresence>
+
+        {/* Modal Plateformes */}
+        <AnimatePresence>
+          {showPlatformsModal && user && (
+            <PlatformsModal savedPlatforms={savedPlatforms} userId={user.uid} onClose={() => setShowPlatformsModal(false)} />
           )}
         </AnimatePresence>
 
@@ -296,6 +330,113 @@ export default function App() {
         </AnimatePresence>
       </div>
     </ErrorBoundary>
+  );
+}
+
+// ── Modal plateformes de paris ──
+function PlatformsModal({ savedPlatforms, userId, onClose }: {
+  savedPlatforms: string[]; userId: string; onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<string[]>(savedPlatforms);
+  const [loading,  setLoading]  = useState(false);
+  const [saved,    setSaved]    = useState(false);
+
+  const toggle = (id: string) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  };
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'users', userId), { platforms: selected });
+      setSaved(true);
+      setTimeout(onClose, 1500);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
+      <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+        className="bg-white w-full max-w-md rounded-t-[32px] shadow-2xl max-h-[90vh] flex flex-col">
+
+        <div className="flex justify-between items-center p-8 pb-4 shrink-0">
+          <div>
+            <h3 className="text-xl font-black text-slate-900">Mes plateformes</h3>
+            <p className="text-xs text-slate-400 font-medium mt-1">Coche celles où tu es inscrit</p>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
+        </div>
+
+        {saved ? (
+          <div className="flex flex-col items-center py-8">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+              <Check size={32} className="text-emerald-600" />
+            </div>
+            <p className="font-black text-slate-900">Sauvegardé !</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-y-auto flex-1 px-8 space-y-2 pb-4">
+              {PLATFORMS.map(p => (
+                <div key={p.id} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
+                  selected.includes(p.id) ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-100'
+                }`}>
+                  {/* Checkbox */}
+                  <button onClick={() => toggle(p.id)}
+                    className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${
+                      selected.includes(p.id) ? 'bg-orange-500 border-orange-500' : 'border-slate-200'
+                    }`}>
+                    {selected.includes(p.id) && <Check size={14} className="text-white" />}
+                  </button>
+
+                  <span className={`flex-1 font-bold text-sm ${selected.includes(p.id) ? 'text-orange-700' : 'text-slate-700'}`}>
+                    {p.name}
+                  </span>
+
+                  {/* Lien auto-exclusion */}
+                  {selected.includes(p.id) && (
+                    <a href={p.url} target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs font-black text-red-500 bg-red-50 px-3 py-1.5 rounded-full active:scale-95 transition-transform">
+                      <ExternalLink size={11} /> S'auto-exclure
+                    </a>
+                  )}
+                </div>
+              ))}
+
+              {/* Lien ANJ exclusion nationale */}
+              <div className="mt-4 p-4 bg-slate-900 rounded-2xl">
+                <p className="text-xs font-black text-white mb-1">Exclusion nationale (ANJ)</p>
+                <p className="text-xs text-slate-400 font-medium mb-3">Se bannir de tous les sites agréés en France en une seule fois.</p>
+                <a href="https://www.anj.fr/jeu-responsable/auto-exclusion" target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-red-600 text-white rounded-xl font-black text-sm active:scale-95 transition-transform">
+                  <ExternalLink size={14} /> Accéder au site de l'ANJ
+                </a>
+              </div>
+
+              {/* Joueurs Info Service */}
+              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
+                <p className="text-xs font-black text-indigo-700 mb-1">Joueurs Info Service</p>
+                <p className="text-xs text-indigo-500 font-medium mb-2">Aide gratuite et confidentielle 7j/7</p>
+                <a href="tel:0974751313" className="flex items-center gap-2 text-sm font-black text-indigo-700">
+                  <Phone size={14} /> 09 74 75 13 13
+                </a>
+              </div>
+            </div>
+
+            <div className="p-8 pt-4 shrink-0">
+              <button onClick={handleSave} disabled={loading}
+                className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {loading
+                  ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Sauvegarde…</>
+                  : <><Check size={18} /> Sauvegarder</>
+                }
+              </button>
+            </div>
+          </>
+        )}
+      </motion.div>
+    </div>
   );
 }
 
@@ -331,15 +472,13 @@ function ContactsModal({ contacts, userId, onClose }: {
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
         className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
-
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-xl font-black text-slate-900">Contacts d'urgence</h3>
             <p className="text-xs text-slate-400 font-medium mt-1">Accessibles en un tap dans le mode SOS</p>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><X size={22} /></button>
+          <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
         </div>
-
         {success ? (
           <div className="flex flex-col items-center py-6">
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
@@ -349,29 +488,24 @@ function ContactsModal({ contacts, userId, onClose }: {
           </div>
         ) : (
           <>
-            {/* Liste des contacts */}
             <div className="space-y-2 mb-6">
               {list.length === 0 ? (
                 <p className="text-sm text-slate-400 font-medium text-center py-4">Aucun contact encore ajouté</p>
-              ) : (
-                list.map((c, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
-                      <Phone size={16} className="text-red-500" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-bold text-slate-900 text-sm">{c.name}</p>
-                      <p className="text-xs text-slate-400 font-medium">{c.phone}</p>
-                    </div>
-                    <button onClick={() => handleRemove(i)} className="text-slate-300 hover:text-red-500 transition-colors">
-                      <Trash2 size={16} />
-                    </button>
+              ) : list.map((c, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                    <Phone size={16} className="text-red-500" />
                   </div>
-                ))
-              )}
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-900 text-sm">{c.name}</p>
+                    <p className="text-xs text-slate-400 font-medium">{c.phone}</p>
+                  </div>
+                  <button onClick={() => handleRemove(i)} className="text-slate-300 hover:text-red-500 transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
             </div>
-
-            {/* Ajouter un contact */}
             {list.length < 5 && (
               <div className="space-y-3 mb-6">
                 <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Ajouter un contact</p>
@@ -387,7 +521,6 @@ function ContactsModal({ contacts, userId, onClose }: {
                 </button>
               </div>
             )}
-
             <button onClick={handleSave} disabled={loading}
               className="w-full py-4 bg-red-500 text-white rounded-2xl font-black hover:bg-red-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
               {loading
@@ -443,7 +576,7 @@ function PseudoModal({ currentPseudo, userId, profile, onClose }: {
             <h3 className="text-xl font-black text-slate-900">{currentPseudo ? 'Modifier le pseudo' : 'Choisir un pseudo'}</h3>
             <p className="text-xs text-slate-400 font-medium mt-1">Visible dans le classement mondial</p>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><X size={22} /></button>
+          <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
         </div>
         {success ? (
           <div className="flex flex-col items-center py-6">
