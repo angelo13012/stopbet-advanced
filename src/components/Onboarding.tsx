@@ -2,11 +2,50 @@ import React, { useState } from 'react';
 import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
 import { UserProfile, OperationType, FirestoreErrorInfo } from '../types';
-import { motion } from 'framer-motion';
-import { User, Calendar, Wallet, ChevronRight, Check, AtSign } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { User, Calendar, Wallet, ChevronRight, Check, AtSign, Shield, Zap, Heart } from 'lucide-react';
+
+// ── Slides de présentation ──
+const INTRO_SLIDES = [
+  {
+    emoji: '🛑',
+    title: 'Reprenez le contrôle',
+    subtitle: 'StopBet vous accompagne chaque jour pour sortir de l\'addiction aux paris sportifs.',
+    bg: 'from-indigo-600 to-violet-700',
+    features: [
+      { icon: '🔥', text: 'Suivez votre streak sans pari' },
+      { icon: '🧠', text: 'Coach IA personnalisé chaque jour' },
+      { icon: '🏆', text: 'Gagnez des badges et de l\'XP' },
+    ],
+  },
+  {
+    emoji: '🆘',
+    title: 'Le mode SOS',
+    subtitle: 'Quand l\'envie de parier frappe, le mode SOS est là en un tap.',
+    bg: 'from-red-500 to-rose-600',
+    features: [
+      { icon: '🌬️', text: 'Respiration guidée 4-4-4' },
+      { icon: '📞', text: 'Appel direct à vos proches' },
+      { icon: '✅', text: '+25 XP si vous résistez' },
+    ],
+  },
+  {
+    emoji: '📈',
+    title: 'Mesurez vos progrès',
+    subtitle: 'Chaque jour sans pari représente de l\'argent économisé et une vie qui se reconstruit.',
+    bg: 'from-emerald-500 to-teal-600',
+    features: [
+      { icon: '💰', text: 'Argent économisé calculé en temps réel' },
+      { icon: '📊', text: 'Graphiques et statistiques avancées' },
+      { icon: '🌍', text: 'Classement mondial avec d\'autres joueurs' },
+    ],
+  },
+];
 
 export default function Onboarding() {
-  const [step, setStep] = useState(1);
+  const [phase, setPhase]     = useState<'intro' | 'form'>('intro');
+  const [slide, setSlide]     = useState(0);
+  const [step,  setStep]      = useState(1);
   const [formData, setFormData] = useState({
     firstName:       '',
     lastName:        '',
@@ -15,9 +54,9 @@ export default function Onboarding() {
     monthlyIncome:   '',
     bettingDuration: "Moins d'un an",
   });
-  const [loading,       setLoading]       = useState(false);
-  const [error,         setError]         = useState<string | null>(null);
-  const [pseudoError,   setPseudoError]   = useState<string | null>(null);
+  const [loading,        setLoading]        = useState(false);
+  const [error,          setError]          = useState<string | null>(null);
+  const [pseudoError,    setPseudoError]    = useState<string | null>(null);
   const [checkingPseudo, setCheckingPseudo] = useState(false);
 
   const handleFirestoreError = (err: any, op: OperationType, path: string | null) => {
@@ -44,26 +83,23 @@ export default function Onboarding() {
     throw new Error(JSON.stringify(info));
   };
 
-  // Vérifier que le pseudo est disponible et valide
   const validatePseudo = async (pseudo: string): Promise<boolean> => {
     const cleaned = pseudo.trim();
-    if (cleaned.length < 3)  { setPseudoError('Le pseudo doit faire au moins 3 caractères'); return false; }
-    if (cleaned.length > 20) { setPseudoError('Le pseudo doit faire au maximum 20 caractères'); return false; }
+    if (cleaned.length < 3)  { setPseudoError('Au moins 3 caractères'); return false; }
+    if (cleaned.length > 20) { setPseudoError('Maximum 20 caractères'); return false; }
     if (!/^[a-zA-Z0-9_-]+$/.test(cleaned)) {
-      setPseudoError('Seuls les lettres, chiffres, _ et - sont autorisés');
+      setPseudoError('Lettres, chiffres, _ et - uniquement');
       return false;
     }
     setCheckingPseudo(true);
     try {
-      const snap = await getDocs(
-        query(collection(db, 'leaderboard'), where('pseudo', '==', cleaned.toLowerCase()))
-      );
+      const snap = await getDocs(query(collection(db, 'leaderboard'), where('pseudo', '==', cleaned.toLowerCase())));
       if (!snap.empty) { setPseudoError('Ce pseudo est déjà pris'); return false; }
       setPseudoError(null);
       return true;
     } catch {
       setPseudoError(null);
-      return true; // En cas d'erreur réseau on laisse passer
+      return true;
     } finally {
       setCheckingPseudo(false);
     }
@@ -71,7 +107,6 @@ export default function Onboarding() {
 
   const handleNext = async () => {
     if (step === 1) {
-      // Valider le pseudo avant de passer à l'étape suivante
       const valid = await validatePseudo(formData.pseudo);
       if (!valid) return;
     }
@@ -83,27 +118,25 @@ export default function Onboarding() {
     setLoading(true); setError(null);
     try {
       const pseudo = formData.pseudo.trim().toLowerCase();
-
-      // Double vérification du pseudo
       const pseudoValid = await validatePseudo(pseudo);
       if (!pseudoValid) { setLoading(false); return; }
 
       const profile: Omit<UserProfile, 'id'> = {
-        firstName:       formData.firstName.trim(),
-        lastName:        formData.lastName.trim(),
+        firstName:          formData.firstName.trim(),
+        lastName:           formData.lastName.trim(),
         pseudo,
-        dob:             formData.dob,
-        monthlyIncome:   parseFloat(formData.monthlyIncome),
-        bettingDuration: formData.bettingDuration,
-        streakCount:  0,
-        bestStreak:   0,
-        xp:           0,
-        level:        1,
-        badges:       [],
+        dob:                formData.dob,
+        monthlyIncome:      parseFloat(formData.monthlyIncome),
+        bettingDuration:    formData.bettingDuration,
+        streakCount:        0,
+        bestStreak:         0,
+        xp:                 0,
+        level:              1,
+        badges:             [],
         subscriptionType:   'free',
         subscriptionStatus: 'active',
-        role:       'user',
-        createdAt:  new Date().toISOString(),
+        role:               'user',
+        createdAt:          new Date().toISOString(),
       };
 
       if (!profile.firstName || !profile.lastName || !profile.dob || isNaN(profile.monthlyIncome)) {
@@ -112,18 +145,10 @@ export default function Onboarding() {
 
       const uid  = auth.currentUser.uid;
       const path = `users/${uid}`;
-
       try {
-        // Créer le profil utilisateur
         await setDoc(doc(db, 'users', uid), profile);
-
-        // Créer l'entrée publique dans le leaderboard
         await setDoc(doc(db, 'leaderboard', uid), {
-          pseudo,
-          xp:          0,
-          streakCount: 0,
-          level:       1,
-          updatedAt:   new Date().toISOString(),
+          pseudo, xp: 0, streakCount: 0, level: 1, updatedAt: new Date().toISOString(),
         });
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, path);
@@ -135,11 +160,101 @@ export default function Onboarding() {
     }
   };
 
+  // ── Phase intro — slides de présentation ──
+  if (phase === 'intro') {
+    const s = INTRO_SLIDES[slide];
+    return (
+      <div className="min-h-screen flex flex-col max-w-md mx-auto">
+        <AnimatePresence mode="wait">
+          <motion.div key={slide}
+            initial={{ opacity: 0, x: 60 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -60 }}
+            transition={{ duration: 0.3 }}
+            className={`flex-1 bg-gradient-to-br ${s.bg} flex flex-col justify-between p-8 min-h-screen`}
+          >
+            {/* Indicateurs de slides */}
+            <div className="flex items-center justify-between pt-4">
+              <div className="flex gap-2">
+                {INTRO_SLIDES.map((_, i) => (
+                  <div key={i} className={`h-1.5 rounded-full transition-all ${i === slide ? 'w-8 bg-white' : 'w-3 bg-white/30'}`} />
+                ))}
+              </div>
+              <button onClick={() => setPhase('form')} className="text-white/60 text-sm font-bold">
+                Passer →
+              </button>
+            </div>
+
+            {/* Contenu */}
+            <div className="flex-1 flex flex-col justify-center py-12">
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.1, type: 'spring', stiffness: 200 }}
+                className="text-8xl mb-8 text-center"
+              >
+                {s.emoji}
+              </motion.div>
+
+              <motion.h1
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-4xl font-black text-white mb-4 text-center leading-tight"
+              >
+                {s.title}
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-white/80 font-medium text-center text-lg leading-relaxed mb-10"
+              >
+                {s.subtitle}
+              </motion.p>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="space-y-3"
+              >
+                {s.features.map((f, i) => (
+                  <div key={i} className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-2xl p-4">
+                    <span className="text-2xl">{f.icon}</span>
+                    <span className="text-white font-bold">{f.text}</span>
+                  </div>
+                ))}
+              </motion.div>
+            </div>
+
+            {/* Bouton suivant */}
+            <motion.button
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              onClick={() => {
+                if (slide < INTRO_SLIDES.length - 1) {
+                  setSlide(s => s + 1);
+                } else {
+                  setPhase('form');
+                }
+              }}
+              className="w-full py-5 bg-white text-slate-900 rounded-3xl font-black text-lg flex items-center justify-center gap-3 shadow-2xl active:scale-95 transition-transform mb-4"
+            >
+              {slide < INTRO_SLIDES.length - 1 ? 'Suivant' : 'Commencer'}
+              <ChevronRight size={22} />
+            </motion.button>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // ── Phase formulaire ──
   const totalSteps = 4;
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 flex flex-col max-w-md mx-auto">
-      {/* Progress bar */}
       <div className="flex justify-between items-center mb-12">
         {Array.from({ length: totalSteps }).map((_, i) => (
           <div key={i} className={`h-2 flex-1 mx-1 rounded-full transition-all ${i + 1 <= step ? 'bg-indigo-600' : 'bg-slate-200'}`} />
@@ -168,25 +283,19 @@ export default function Onboarding() {
                 </div>
               ))}
 
-              {/* Pseudo */}
               <div>
                 <div className="relative">
                   <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                   <input type="text" placeholder="Pseudo (visible dans le classement)"
                     value={formData.pseudo}
                     onChange={e => { setFormData({ ...formData, pseudo: e.target.value }); setPseudoError(null); }}
-                    className={`w-full pl-12 pr-4 py-4 bg-white border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 ${
-                      pseudoError ? 'border-red-300' : 'border-slate-100'
-                    }`}
-                    maxLength={20}
-                  />
+                    className={`w-full pl-12 pr-4 py-4 bg-white border rounded-2xl shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-600 ${pseudoError ? 'border-red-300' : 'border-slate-100'}`}
+                    maxLength={20} />
                 </div>
-                {pseudoError && <p className="text-xs text-red-500 font-medium mt-1 ml-1">{pseudoError}</p>}
-                {!pseudoError && (
-                  <p className="text-xs text-slate-400 font-medium mt-1 ml-1">
-                    Visible dans le classement mondial. Lettres, chiffres, _ et - uniquement.
-                  </p>
-                )}
+                {pseudoError
+                  ? <p className="text-xs text-red-500 font-medium mt-1 ml-1">{pseudoError}</p>
+                  : <p className="text-xs text-slate-400 font-medium mt-1 ml-1">Lettres, chiffres, _ et - uniquement.</p>
+                }
               </div>
 
               <div className="relative">
@@ -234,7 +343,7 @@ export default function Onboarding() {
           </motion.div>
         )}
 
-        {/* ── Étape 4 — Essai 7 jours ── */}
+        {/* ── Étape 4 — Trial ── */}
         {step === 4 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Dernière étape 🎁</h2>
@@ -253,9 +362,13 @@ export default function Onboarding() {
                   '🧠 Coach IA Claude personnalisé',
                   '📊 Graphique & stats avancées',
                   '💰 Argent économisé calculé',
-                  '🏆 Classement mondial',
+                  '🆘 Mode SOS avec contacts d\'urgence',
+                  '📅 Citations motivantes quotidiennes',
+                  '🧘 Badges journal d\'humeur',
                 ].map(item => (
-                  <li key={item} className="text-sm font-medium text-slate-700">{item}</li>
+                  <li key={item} className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                    <span>{item}</span>
+                  </li>
                 ))}
               </ul>
               <p className="text-xs text-slate-400 font-medium">
@@ -263,14 +376,12 @@ export default function Onboarding() {
               </p>
             </div>
 
-            <p className="text-center text-slate-400 text-sm font-medium">
-              Ou commencer directement en version gratuite ↓
-            </p>
+            <p className="text-center text-slate-400 text-sm font-medium">Ou commencer directement en version gratuite ↓</p>
           </motion.div>
         )}
       </div>
 
-      {/* Boutons de navigation */}
+      {/* Navigation */}
       <div className="flex gap-4 mt-8">
         {step > 1 && (
           <button onClick={() => setStep(s => s - 1)}
@@ -292,22 +403,12 @@ export default function Onboarding() {
 
         {step === 4 && (
           <div className="flex-[2] flex flex-col gap-3">
-            <button
-              onClick={async () => {
-                await handleSubmit();
-                // Après inscription → rediriger vers Stripe trial
-                // La page Subscription gère le trial
-              }}
-              disabled={loading}
-              className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black hover:bg-amber-600 transition-all shadow-lg disabled:opacity-50"
-            >
-              {loading ? 'Création…' : 'Commencer l\'essai gratuit 🎁'}
+            <button onClick={handleSubmit} disabled={loading}
+              className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black hover:bg-amber-600 transition-all shadow-lg disabled:opacity-50">
+              {loading ? 'Création…' : "Commencer l'essai gratuit 🎁"}
             </button>
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition-all disabled:opacity-50"
-            >
+            <button onClick={handleSubmit} disabled={loading}
+              className="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition-all disabled:opacity-50">
               {loading ? '…' : 'Commencer en version gratuite'}
             </button>
           </div>
