@@ -5,14 +5,15 @@ import {
   XP_PER_DAY, XP_WEEK_BONUS, computeLevel,
 } from '../types';
 
-export function computeStreakFromLastBet(lastBetDate?: string): number {
-  if (!lastBetDate) return 0;
-  const last  = new Date(lastBetDate); last.setHours(0, 0, 0, 0);
-  const today = new Date();            today.setHours(0, 0, 0, 0);
+export function computeStreakFromLastBet(lastBetDate?: string, createdAt?: string): number {
+  // Si pas de rechute, on compte depuis la création du compte
+  const startDate = lastBetDate ?? createdAt;
+  if (!startDate) return 0;
+  const last  = new Date(startDate); last.setHours(0, 0, 0, 0);
+  const today = new Date();          today.setHours(0, 0, 0, 0);
   return Math.max(0, Math.floor((today.getTime() - last.getTime()) / 86_400_000));
 }
 
-// Met à jour le leaderboard public avec les données non-sensibles
 async function syncLeaderboard(userId: string, data: {
   pseudo: string;
   xp: number;
@@ -32,11 +33,11 @@ async function syncLeaderboard(userId: string, data: {
   }
 }
 
-// Appelé au chargement de l'app pour auto-incrémenter les jours sans pari + XP
 export async function syncStreakAndXP(userId: string, profile: UserProfile): Promise<void> {
-  const realStreak = computeStreakFromLastBet(profile.lastBetDate);
+  // On passe createdAt comme fallback si pas de lastBetDate
+  const realStreak = computeStreakFromLastBet(profile.lastBetDate, profile.createdAt);
+
   if (realStreak <= profile.streakCount) {
-    // Pas de nouveau streak mais on sync quand même le leaderboard si pseudo existe
     if (profile.pseudo) {
       await syncLeaderboard(userId, {
         pseudo:      profile.pseudo,
@@ -58,13 +59,11 @@ export async function syncStreakAndXP(userId: string, profile: UserProfile): Pro
   const newLevel   = computeLevel(newXP);
   const bestStreak = Math.max(profile.bestStreak ?? 0, realStreak);
 
-  // Vérifier les nouveaux badges
   const earned: BadgeId[] = [...(profile.badges ?? [])];
   ALL_BADGES.filter(b => b.requiredStreak).forEach(b => {
     if (!earned.includes(b.id) && realStreak >= (b.requiredStreak ?? 0)) earned.push(b.id);
   });
 
-  // Mettre à jour le profil privé
   await updateDoc(doc(db, 'users', userId), {
     streakCount: realStreak,
     bestStreak,
@@ -73,7 +72,6 @@ export async function syncStreakAndXP(userId: string, profile: UserProfile): Pro
     badges:      earned,
   });
 
-  // Mettre à jour le leaderboard public
   if (profile.pseudo) {
     await syncLeaderboard(userId, {
       pseudo:      profile.pseudo,
@@ -84,12 +82,11 @@ export async function syncStreakAndXP(userId: string, profile: UserProfile): Pro
   }
 }
 
-// Appelé quand l'utilisateur enregistre une rechute
 export async function handleRelapse(userId: string, profile: UserProfile): Promise<void> {
   const updates: Record<string, unknown> = {
-    streakCount:  0,
-    lastBetDate:  new Date().toISOString(),
-    bestStreak:   Math.max(profile.bestStreak ?? 0, profile.streakCount),
+    streakCount: 0,
+    lastBetDate: new Date().toISOString(),
+    bestStreak:  Math.max(profile.bestStreak ?? 0, profile.streakCount),
   };
 
   if (profile.streakCount > 0 && !(profile.badges ?? []).includes('comeback')) {
@@ -98,7 +95,6 @@ export async function handleRelapse(userId: string, profile: UserProfile): Promi
 
   await updateDoc(doc(db, 'users', userId), updates);
 
-  // Mettre à jour le leaderboard — streak remis à 0
   if (profile.pseudo) {
     await syncLeaderboard(userId, {
       pseudo:      profile.pseudo,
@@ -109,7 +105,6 @@ export async function handleRelapse(userId: string, profile: UserProfile): Promi
   }
 }
 
-// Donner un badge spécifique
 export async function awardBadge(userId: string, badgeId: BadgeId): Promise<void> {
   await updateDoc(doc(db, 'users', userId), { badges: arrayUnion(badgeId) });
 }
