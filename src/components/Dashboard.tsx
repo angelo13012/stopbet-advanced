@@ -5,12 +5,12 @@ import {
 } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useFirebase } from './FirebaseProvider';
-import { Bet, Goal, ALL_BADGES, getLevelMeta } from '../types';
+import { Bet, Goal, ALL_BADGES, getLevelMeta, getDailyQuote } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingDown, Flame, Target, Sparkles,
   Plus, Trash2, X, Trophy, Star, Zap, Lock, SmilePlus,
-  AlertTriangle, AlertOctagon,
+  AlertTriangle, AlertOctagon, Quote,
 } from 'lucide-react';
 import { getMotivationalMessage, analyzeRelapsePattern, getMoodAnalysis } from '../services/aiCoach';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -32,11 +32,10 @@ const MOODS = [
 
 const MOOD_RISK: Record<string, boolean> = { stressed: true, sad: true };
 
-// Seuils d'alerte budget
 const BUDGET_ALERTS = [
-  { pct: 30, level: 'critical', color: 'bg-red-50 border-red-200',    icon: 'text-red-500',    text: 'text-red-700',    label: 'Situation critique',  msg: (p: number) => `Tu as dépensé ${p.toFixed(0)}% de ton salaire en paris ce mois. C'est une situation sérieuse — pense à activer le mode SOS.` },
+  { pct: 30, level: 'critical', color: 'bg-red-50 border-red-200',      icon: 'text-red-500',    text: 'text-red-700',    label: 'Situation critique', msg: (p: number) => `Tu as dépensé ${p.toFixed(0)}% de ton salaire en paris ce mois. C'est une situation sérieuse — pense à activer le mode SOS.` },
   { pct: 20, level: 'danger',   color: 'bg-orange-50 border-orange-200', icon: 'text-orange-500', text: 'text-orange-700', label: 'Dépenses élevées',   msg: (p: number) => `${p.toFixed(0)}% de ton salaire dépensé en paris ce mois. Tu approches d'un niveau préoccupant.` },
-  { pct: 10, level: 'warning',  color: 'bg-amber-50 border-amber-200',  icon: 'text-amber-500',  text: 'text-amber-700',  label: 'Attention',           msg: (p: number) => `${p.toFixed(0)}% de ton salaire est parti en paris ce mois. Reste vigilant.` },
+  { pct: 10, level: 'warning',  color: 'bg-amber-50 border-amber-200',   icon: 'text-amber-500',  text: 'text-amber-700',  label: 'Attention',          msg: (p: number) => `${p.toFixed(0)}% de ton salaire est parti en paris ce mois. Reste vigilant.` },
 ];
 
 function getBudgetAlert(pct: number) {
@@ -45,15 +44,16 @@ function getBudgetAlert(pct: number) {
 
 export default function Dashboard() {
   const { profile, user } = useFirebase();
-  const [recentBets,   setRecentBets]   = useState<Bet[]>([]);
-  const [goals,        setGoals]        = useState<Goal[]>([]);
-  const [coachMsg,     setCoachMsg]     = useState('Chargement de votre message du jour…');
-  const [analysis,     setAnalysis]     = useState<string | null>(null);
-  const [showAnalysis, setShowAnalysis] = useState(false);
-  const [showAddGoal,  setShowAddGoal]  = useState(false);
-  const [newGoal,      setNewGoal]      = useState({ title: '', cost: '' });
-  const [loading,      setLoading]      = useState(false);
+  const [recentBets,     setRecentBets]     = useState<Bet[]>([]);
+  const [goals,          setGoals]          = useState<Goal[]>([]);
+  const [coachMsg,       setCoachMsg]       = useState('Chargement de votre message du jour…');
+  const [analysis,       setAnalysis]       = useState<string | null>(null);
+  const [showAnalysis,   setShowAnalysis]   = useState(false);
+  const [showAddGoal,    setShowAddGoal]    = useState(false);
+  const [newGoal,        setNewGoal]        = useState({ title: '', cost: '' });
+  const [loading,        setLoading]        = useState(false);
   const [dismissedAlert, setDismissedAlert] = useState<string | null>(null);
+  const [newBadge,       setNewBadge]       = useState<{ emoji: string; name: string } | null>(null);
 
   // Humeur
   const [showMoodModal, setShowMoodModal] = useState(false);
@@ -63,12 +63,14 @@ export default function Dashboard() {
   const [moodLoading,   setMoodLoading]   = useState(false);
   const [moodAnalysis,  setMoodAnalysis]  = useState<string | null>(null);
   const [recentMoods,   setRecentMoods]   = useState<{ value: string; date: string }[]>([]);
+  const [moodStreak,    setMoodStreak]    = useState(0);
 
   const coachMsgLoadedRef = useRef<string | null>(null);
 
   const now          = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const todayStr     = now.toISOString().slice(0, 10);
+  const dailyQuote   = getDailyQuote();
 
   useEffect(() => {
     if (!user) return;
@@ -91,7 +93,23 @@ export default function Dashboard() {
         if (todayDoc.exists()) setTodayMood(todayDoc.data().value);
         const { getDocs } = await import('firebase/firestore');
         const moodsSnap = await getDocs(query(collection(db, 'users', user.uid, 'moods'), orderBy('date', 'desc')));
-        setRecentMoods(moodsSnap.docs.slice(0, 7).map(d => ({ value: d.data().value, date: d.data().date })));
+        const moods = moodsSnap.docs.slice(0, 30).map(d => ({ value: d.data().value, date: d.data().date }));
+        setRecentMoods(moods);
+
+        // Calculer le streak de journal (jours consécutifs)
+        let streak = 0;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        for (let i = 0; i < moods.length; i++) {
+          const expected = new Date(today);
+          expected.setDate(today.getDate() - i);
+          const expectedStr = expected.toISOString().slice(0, 10);
+          if (moods[i]?.date === expectedStr) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+        setMoodStreak(streak);
       } catch {}
     };
     loadMoods();
@@ -145,7 +163,34 @@ export default function Dashboard() {
         value: moodValue, note, date: todayStr, savedAt: new Date().toISOString(),
       });
       setTodayMood(moodValue);
-      await updateDoc(doc(db, 'users', user.uid), { xp: (profile.xp ?? 0) + 5 });
+
+      const newStreak = moodStreak + 1;
+      const updates: Record<string, any> = {
+        xp: (profile.xp ?? 0) + 5,
+        moodStreakCount: newStreak,
+        lastMoodDate: todayStr,
+      };
+
+      // Vérifier badges journal
+      const earned = [...(profile.badges ?? [])];
+      let badgeEarned = null;
+      if (newStreak >= 7 && !earned.includes('mood_week')) {
+        earned.push('mood_week');
+        updates.badges = earned;
+        badgeEarned = { emoji: '🧘', name: 'Semaine consciente' };
+      } else if (newStreak >= 30 && !earned.includes('mood_month')) {
+        earned.push('mood_month');
+        updates.badges = earned;
+        badgeEarned = { emoji: '🌟', name: 'Mois conscient' };
+      }
+
+      await updateDoc(doc(db, 'users', user.uid), updates);
+
+      if (badgeEarned) {
+        setNewBadge(badgeEarned);
+        setTimeout(() => setNewBadge(null), 3000);
+      }
+
       const isPremium = profile.subscriptionType === 'premium';
       if (isPremium && MOOD_RISK[moodValue]) {
         const a = await getMoodAnalysis(moodValue, note, profile, recentBets);
@@ -194,7 +239,7 @@ export default function Dashboard() {
   const todayMoodDef = MOODS.find(m => m.value === todayMood);
   const budgetAlert  = getBudgetAlert(spendPct);
 
-  const pieData    = [
+  const pieData  = [
     { name: 'Dépensé', value: totalSpent },
     { name: 'Restant', value: Math.max(0, profile.monthlyIncome - totalSpent) },
   ];
@@ -204,52 +249,53 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6 pb-24">
 
+      {/* ── Popup badge gagné ── */}
+      <AnimatePresence>
+        {newBadge && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.5, y: -50 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.5, y: -50 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-white px-6 py-4 rounded-3xl shadow-2xl flex items-center gap-3"
+          >
+            <span className="text-3xl">{newBadge.emoji}</span>
+            <div>
+              <p className="text-xs font-bold opacity-80 uppercase tracking-wider">Badge débloqué !</p>
+              <p className="font-black">{newBadge.name}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Alerte budget — Premium uniquement ── */}
       <AnimatePresence>
         {isPremium && budgetAlert && dismissedAlert !== budgetAlert.level && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className={`border-2 rounded-3xl p-5 ${budgetAlert.color}`}
-          >
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className={`border-2 rounded-3xl p-5 ${budgetAlert.color}`}>
             <div className="flex items-start gap-3">
               <div className={`shrink-0 mt-0.5 ${budgetAlert.icon}`}>
-                {budgetAlert.level === 'critical'
-                  ? <AlertOctagon size={22} />
-                  : <AlertTriangle size={22} />
-                }
+                {budgetAlert.level === 'critical' ? <AlertOctagon size={22} /> : <AlertTriangle size={22} />}
               </div>
               <div className="flex-1">
                 <p className={`font-black text-sm mb-1 ${budgetAlert.text}`}>{budgetAlert.label}</p>
-                <p className={`text-xs font-medium leading-relaxed ${budgetAlert.text} opacity-80`}>
-                  {budgetAlert.msg(spendPct)}
-                </p>
+                <p className={`text-xs font-medium leading-relaxed ${budgetAlert.text} opacity-80`}>{budgetAlert.msg(spendPct)}</p>
                 {budgetAlert.level === 'critical' && (
                   <p className={`text-xs font-black mt-2 ${budgetAlert.text}`}>
-                    💡 Pense à utiliser le mode SOS ou à contacter le 09 74 75 13 13 (Joueurs Info Service)
+                    💡 Pense à utiliser le mode SOS ou à contacter le 09 74 75 13 13
                   </p>
                 )}
               </div>
-              <button onClick={() => setDismissedAlert(budgetAlert.level)} className="text-slate-400 shrink-0">
-                <X size={16} />
-              </button>
+              <button onClick={() => setDismissedAlert(budgetAlert.level)} className="text-slate-400 shrink-0"><X size={16} /></button>
             </div>
-
-            {/* Barre de progression budget */}
             <div className="mt-4">
               <div className="flex justify-between text-xs font-bold mb-1">
                 <span className={budgetAlert.text}>{totalSpent.toFixed(0)}€ dépensé</span>
                 <span className={budgetAlert.text}>{profile.monthlyIncome}€ salaire</span>
               </div>
               <div className="h-3 bg-white/50 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, spendPct)}%` }}
+                <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, spendPct)}%` }}
                   transition={{ duration: 1, ease: 'easeOut' }}
-                  className={`h-full rounded-full ${
-                    budgetAlert.level === 'critical' ? 'bg-red-500' :
-                    budgetAlert.level === 'danger'   ? 'bg-orange-500' : 'bg-amber-400'
-                  }`}
-                />
+                  className={`h-full rounded-full ${budgetAlert.level === 'critical' ? 'bg-red-500' : budgetAlert.level === 'danger' ? 'bg-orange-500' : 'bg-amber-400'}`} />
               </div>
               <p className={`text-xs font-black mt-1 text-right ${budgetAlert.text}`}>{spendPct.toFixed(1)}%</p>
             </div>
@@ -273,6 +319,16 @@ export default function Dashboard() {
         <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12"><Flame size={160} /></div>
       </motion.div>
 
+      {/* ── Citation du jour ── */}
+      <div className="bg-slate-900 p-5 rounded-2xl relative overflow-hidden">
+        <div className="flex gap-3 items-start relative z-10">
+          <Quote size={18} className="text-indigo-400 shrink-0 mt-0.5" />
+          <p className="text-white font-medium leading-relaxed text-sm italic">{dailyQuote}</p>
+        </div>
+        <p className="text-slate-500 text-xs font-bold mt-2 ml-7 relative z-10">Citation du jour</p>
+        <div className="absolute -right-4 -bottom-4 opacity-5 text-[80px]">💬</div>
+      </div>
+
       {/* ── Journal d'humeur ── */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center justify-between mb-3">
@@ -280,7 +336,14 @@ export default function Dashboard() {
             <SmilePlus size={18} className="text-violet-500" />
             <p className="text-sm font-bold text-slate-900 uppercase tracking-wider">Journal d'humeur</p>
           </div>
-          {todayMood && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">+5 XP ✓</span>}
+          <div className="flex items-center gap-2">
+            {moodStreak > 0 && (
+              <span className="text-xs font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+                🔥 {moodStreak} jour{moodStreak > 1 ? 's' : ''} d'affilée
+              </span>
+            )}
+            {todayMood && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">+5 XP ✓</span>}
+          </div>
         </div>
         {todayMood ? (
           <div className="flex items-center gap-3 mb-4">
@@ -298,6 +361,8 @@ export default function Dashboard() {
             + Ajouter mon humeur du jour (+5 XP)
           </button>
         )}
+
+        {/* Historique 7 jours */}
         {recentMoods.length > 0 && (
           <div className="flex gap-2 justify-between">
             {recentMoods.slice(0, 7).map((m, i) => {
@@ -310,6 +375,23 @@ export default function Dashboard() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Progression badge journal */}
+        {moodStreak > 0 && moodStreak < 30 && (
+          <div className="mt-3 pt-3 border-t border-slate-50">
+            <div className="flex justify-between text-xs font-bold mb-1">
+              <span className="text-slate-400">{moodStreak < 7 ? 'Badge Semaine consciente 🧘' : 'Badge Mois conscient 🌟'}</span>
+              <span className="text-violet-600">{moodStreak}/{moodStreak < 7 ? 7 : 30}</span>
+            </div>
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${(moodStreak / (moodStreak < 7 ? 7 : 30)) * 100}%` }}
+                className="h-full bg-violet-500 rounded-full"
+              />
+            </div>
           </div>
         )}
       </div>
