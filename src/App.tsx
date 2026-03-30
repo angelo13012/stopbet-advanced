@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, PlusCircle, User,
   CreditCard, LogOut, ChevronRight, Trophy,
   AlertTriangle, AtSign, Check, X, Pencil, Bell, BellOff,
-  Phone, Plus, Trash2, ShieldOff, ExternalLink, Lock,
+  Phone, Plus, Trash2, ShieldOff, ExternalLink, Lock, Shield,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
@@ -17,6 +17,7 @@ import Progress from './components/Progress';
 import Subscription from './components/Subscription';
 import Leaderboard from './components/Leaderboard';
 import SOSMode from './components/SOSMode';
+import CGU from './components/CGU';
 import { syncStreakAndXP } from './services/streak';
 import {
   requestNotificationPermission,
@@ -44,13 +45,14 @@ const PLATFORMS = [
 
 export default function App() {
   const { user, profile, loading, isAuthReady } = useFirebase();
-  const [activeTab,           setActiveTab]           = useState<Tab>('dashboard');
-  const [showSOS,             setShowSOS]             = useState(false);
-  const [showPseudoModal,     setShowPseudoModal]     = useState(false);
-  const [showContactsModal,   setShowContactsModal]   = useState(false);
-  const [showPlatformsModal,  setShowPlatformsModal]  = useState(false);
-  const [notifLoading,        setNotifLoading]        = useState(false);
-  const [foregroundNotif,     setForegroundNotif]     = useState<{ title: string; body: string } | null>(null);
+  const [activeTab,          setActiveTab]          = useState<Tab>('dashboard');
+  const [showSOS,            setShowSOS]            = useState(false);
+  const [showPseudoModal,    setShowPseudoModal]    = useState(false);
+  const [showContactsModal,  setShowContactsModal]  = useState(false);
+  const [showPlatformsModal, setShowPlatformsModal] = useState(false);
+  const [showCGU,            setShowCGU]            = useState(false);
+  const [notifLoading,       setNotifLoading]       = useState(false);
+  const [foregroundNotif,    setForegroundNotif]    = useState<{ title: string; body: string } | null>(null);
 
   useEffect(() => {
     if (user && profile) {
@@ -82,9 +84,9 @@ export default function App() {
   if (!user)    return <Auth />;
   if (!profile) return <Onboarding />;
 
-  const notifEnabled    = profile.notificationsEnabled === true;
-  const notifSupported  = areNotificationsSupported();
-  const savedPlatforms  = (profile as any).platforms ?? [];
+  const notifEnabled   = profile.notificationsEnabled === true;
+  const notifSupported = areNotificationsSupported();
+  const savedPlatforms = (profile as any).platforms ?? [];
 
   const handleToggleNotifications = async () => {
     if (!user) return;
@@ -241,6 +243,19 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
+            {/* CGU & Confidentialité */}
+            <button onClick={() => setShowCGU(true)}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-50 rounded-lg text-slate-500"><Shield size={20} /></div>
+                <div className="text-left">
+                  <p className="font-semibold text-slate-900">CGU & Confidentialité</p>
+                  <p className="text-sm text-slate-500">Mentions légales et politique de données</p>
+                </div>
+              </div>
+              <ChevronRight size={20} className="text-slate-400" />
+            </button>
+
             <button onClick={handleResetToFree}
               className="w-full flex items-center gap-3 p-4 bg-orange-50 text-orange-600 rounded-2xl font-semibold">
               <CreditCard size={20} /> Passer en Free (test)
@@ -334,6 +349,11 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* CGU */}
+        <AnimatePresence>
+          {showCGU && <CGU onClose={() => setShowCGU(false)} />}
+        </AnimatePresence>
+
         {/* Mode SOS */}
         <AnimatePresence>
           {showSOS && (
@@ -373,7 +393,6 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
         className="bg-white w-full max-w-md rounded-t-[32px] shadow-2xl max-h-[90vh] flex flex-col">
-
         <div className="flex justify-between items-center p-8 pb-4 shrink-0">
           <div>
             <h3 className="text-xl font-black text-slate-900">Mes plateformes</h3>
@@ -381,7 +400,6 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
           </div>
           <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
         </div>
-
         {saved ? (
           <div className="flex flex-col items-center py-8">
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
@@ -396,19 +414,15 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
                 <div key={p.id} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
                   selected.includes(p.id) ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-100'
                 }`}>
-                  {/* Checkbox */}
                   <button onClick={() => toggle(p.id)}
                     className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${
                       selected.includes(p.id) ? 'bg-orange-500 border-orange-500' : 'border-slate-200'
                     }`}>
                     {selected.includes(p.id) && <Check size={14} className="text-white" />}
                   </button>
-
                   <span className={`flex-1 font-bold text-sm ${selected.includes(p.id) ? 'text-orange-700' : 'text-slate-700'}`}>
                     {p.name}
                   </span>
-
-                  {/* Lien auto-exclusion */}
                   {selected.includes(p.id) && (
                     <a href={p.url} target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1 text-xs font-black text-red-500 bg-red-50 px-3 py-1.5 rounded-full active:scale-95 transition-transform">
@@ -417,8 +431,6 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
                   )}
                 </div>
               ))}
-
-              {/* Lien ANJ exclusion nationale */}
               <div className="mt-4 p-4 bg-slate-900 rounded-2xl">
                 <p className="text-xs font-black text-white mb-1">Exclusion nationale (ANJ)</p>
                 <p className="text-xs text-slate-400 font-medium mb-3">Se bannir de tous les sites agréés en France en une seule fois.</p>
@@ -427,8 +439,6 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
                   <ExternalLink size={14} /> Accéder au site de l'ANJ
                 </a>
               </div>
-
-              {/* Joueurs Info Service */}
               <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
                 <p className="text-xs font-black text-indigo-700 mb-1">Joueurs Info Service</p>
                 <p className="text-xs text-indigo-500 font-medium mb-2">Aide gratuite et confidentielle 7j/7</p>
@@ -437,7 +447,6 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
                 </a>
               </div>
             </div>
-
             <div className="p-8 pt-4 shrink-0">
               <button onClick={handleSave} disabled={loading}
                 className="w-full py-4 bg-orange-500 text-white rounded-2xl font-black hover:bg-orange-600 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
