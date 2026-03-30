@@ -204,9 +204,9 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6 pb-24">
 
-      {/* ── Alerte budget ── */}
+      {/* ── Alerte budget — Premium uniquement ── */}
       <AnimatePresence>
-        {budgetAlert && dismissedAlert !== budgetAlert.level && (
+        {isPremium && budgetAlert && dismissedAlert !== budgetAlert.level && (
           <motion.div
             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
             className={`border-2 rounded-3xl p-5 ${budgetAlert.color}`}

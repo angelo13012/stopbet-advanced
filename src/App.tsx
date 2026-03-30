@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, PlusCircle, User,
   CreditCard, LogOut, ChevronRight, Trophy,
   AlertTriangle, AtSign, Check, X, Pencil, Bell, BellOff,
-  Phone, Plus, Trash2, ShieldOff, ExternalLink,
+  Phone, Plus, Trash2, ShieldOff, ExternalLink, Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
@@ -148,22 +148,36 @@ export default function App() {
 
           <div className="space-y-3">
 
-            {/* Plateformes de paris */}
-            <button onClick={() => setShowPlatformsModal(true)}
-              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-orange-50 rounded-lg text-orange-500"><ShieldOff size={20} /></div>
-                <div className="text-left">
-                  <p className="font-semibold text-slate-900">Mes plateformes de paris</p>
-                  <p className="text-sm text-slate-500">
-                    {savedPlatforms.length > 0
-                      ? `${savedPlatforms.length} plateforme${savedPlatforms.length > 1 ? 's' : ''} — liens d'auto-exclusion`
-                      : 'Gérer mes inscriptions et m\'auto-exclure'}
-                  </p>
+            {/* Plateformes de paris — Premium uniquement */}
+            {profile.subscriptionType === 'premium' ? (
+              <button onClick={() => setShowPlatformsModal(true)}
+                className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-50 rounded-lg text-orange-500"><ShieldOff size={20} /></div>
+                  <div className="text-left">
+                    <p className="font-semibold text-slate-900">Mes plateformes de paris</p>
+                    <p className="text-sm text-slate-500">
+                      {savedPlatforms.length > 0
+                        ? `${savedPlatforms.length} plateforme${savedPlatforms.length > 1 ? 's' : ''} — liens d'auto-exclusion`
+                        : "Gérer mes inscriptions et m'auto-exclure"}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <ChevronRight size={20} className="text-slate-400" />
-            </button>
+                <ChevronRight size={20} className="text-slate-400" />
+              </button>
+            ) : (
+              <button onClick={() => setActiveTab('subscription')}
+                className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100 opacity-60">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-orange-50 rounded-lg text-orange-500"><ShieldOff size={20} /></div>
+                  <div className="text-left">
+                    <p className="font-semibold text-slate-900">Mes plateformes de paris</p>
+                    <p className="text-sm text-indigo-500 font-bold">Premium uniquement</p>
+                  </div>
+                </div>
+                <Lock size={16} className="text-slate-300" />
+              </button>
+            )}
 
             {/* Contacts d'urgence */}
             <button onClick={() => setShowContactsModal(true)}
