@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingDown, Flame, Target, Sparkles,
   Plus, Trash2, X, Trophy, Star, Zap, Lock, SmilePlus,
+  AlertTriangle, AlertOctagon,
 } from 'lucide-react';
 import { getMotivationalMessage, analyzeRelapsePattern, getMoodAnalysis } from '../services/aiCoach';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -22,17 +23,25 @@ function getLocalMessage(jours: number): string {
 }
 
 const MOODS = [
-  { value: 'stressed',  emoji: '😤', label: 'Stressé'  },
-  { value: 'sad',       emoji: '😔', label: 'Déprimé'  },
-  { value: 'neutral',   emoji: '😐', label: 'Neutre'   },
-  { value: 'good',      emoji: '😊', label: 'Bien'     },
-  { value: 'strong',    emoji: '💪', label: 'Fort'     },
+  { value: 'stressed', emoji: '😤', label: 'Stressé' },
+  { value: 'sad',      emoji: '😔', label: 'Déprimé' },
+  { value: 'neutral',  emoji: '😐', label: 'Neutre'  },
+  { value: 'good',     emoji: '😊', label: 'Bien'    },
+  { value: 'strong',   emoji: '💪', label: 'Fort'    },
 ];
 
-const MOOD_RISK: Record<string, boolean> = {
-  stressed: true,
-  sad:      true,
-};
+const MOOD_RISK: Record<string, boolean> = { stressed: true, sad: true };
+
+// Seuils d'alerte budget
+const BUDGET_ALERTS = [
+  { pct: 30, level: 'critical', color: 'bg-red-50 border-red-200',    icon: 'text-red-500',    text: 'text-red-700',    label: 'Situation critique',  msg: (p: number) => `Tu as dépensé ${p.toFixed(0)}% de ton salaire en paris ce mois. C'est une situation sérieuse — pense à activer le mode SOS.` },
+  { pct: 20, level: 'danger',   color: 'bg-orange-50 border-orange-200', icon: 'text-orange-500', text: 'text-orange-700', label: 'Dépenses élevées',   msg: (p: number) => `${p.toFixed(0)}% de ton salaire dépensé en paris ce mois. Tu approches d'un niveau préoccupant.` },
+  { pct: 10, level: 'warning',  color: 'bg-amber-50 border-amber-200',  icon: 'text-amber-500',  text: 'text-amber-700',  label: 'Attention',           msg: (p: number) => `${p.toFixed(0)}% de ton salaire est parti en paris ce mois. Reste vigilant.` },
+];
+
+function getBudgetAlert(pct: number) {
+  return BUDGET_ALERTS.find(a => pct >= a.pct) ?? null;
+}
 
 export default function Dashboard() {
   const { profile, user } = useFirebase();
@@ -44,15 +53,16 @@ export default function Dashboard() {
   const [showAddGoal,  setShowAddGoal]  = useState(false);
   const [newGoal,      setNewGoal]      = useState({ title: '', cost: '' });
   const [loading,      setLoading]      = useState(false);
+  const [dismissedAlert, setDismissedAlert] = useState<string | null>(null);
 
   // Humeur
-  const [showMoodModal,  setShowMoodModal]  = useState(false);
-  const [todayMood,      setTodayMood]      = useState<string | null>(null);
-  const [selectedMood,   setSelectedMood]   = useState<string | null>(null);
-  const [moodNote,       setMoodNote]       = useState('');
-  const [moodLoading,    setMoodLoading]    = useState(false);
-  const [moodAnalysis,   setMoodAnalysis]   = useState<string | null>(null);
-  const [recentMoods,    setRecentMoods]    = useState<{ value: string; date: string }[]>([]);
+  const [showMoodModal, setShowMoodModal] = useState(false);
+  const [todayMood,     setTodayMood]     = useState<string | null>(null);
+  const [selectedMood,  setSelectedMood]  = useState<string | null>(null);
+  const [moodNote,      setMoodNote]      = useState('');
+  const [moodLoading,   setMoodLoading]   = useState(false);
+  const [moodAnalysis,  setMoodAnalysis]  = useState<string | null>(null);
+  const [recentMoods,   setRecentMoods]   = useState<{ value: string; date: string }[]>([]);
 
   const coachMsgLoadedRef = useRef<string | null>(null);
 
@@ -60,7 +70,6 @@ export default function Dashboard() {
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const todayStr     = now.toISOString().slice(0, 10);
 
-  // Listeners Firestore
   useEffect(() => {
     if (!user) return;
     const unsubBets = onSnapshot(
@@ -74,30 +83,20 @@ export default function Dashboard() {
     return () => { unsubBets(); unsubGoals(); };
   }, [user?.uid]);
 
-  // Charger l'humeur du jour + historique 7 jours
   useEffect(() => {
     if (!user) return;
     const loadMoods = async () => {
       try {
-        // Humeur du jour
         const todayDoc = await getDoc(doc(db, 'users', user.uid, 'moods', todayStr));
         if (todayDoc.exists()) setTodayMood(todayDoc.data().value);
-
-        // 7 derniers jours
         const { getDocs } = await import('firebase/firestore');
-        const moodsSnap = await getDocs(
-          query(collection(db, 'users', user.uid, 'moods'), orderBy('date', 'desc'))
-        );
-        const moods = moodsSnap.docs
-          .slice(0, 7)
-          .map(d => ({ value: d.data().value, date: d.data().date }));
-        setRecentMoods(moods);
+        const moodsSnap = await getDocs(query(collection(db, 'users', user.uid, 'moods'), orderBy('date', 'desc')));
+        setRecentMoods(moodsSnap.docs.slice(0, 7).map(d => ({ value: d.data().value, date: d.data().date })));
       } catch {}
     };
     loadMoods();
   }, [user?.uid, todayStr]);
 
-  // Coach message
   useEffect(() => {
     if (!profile || !user) return;
     const isPremium = profile.subscriptionType === 'premium';
@@ -143,21 +142,14 @@ export default function Dashboard() {
     try {
       const note = moodNote.trim();
       await setDoc(doc(db, 'users', user.uid, 'moods', todayStr), {
-        value:   moodValue,
-        note,
-        date:    todayStr,
-        savedAt: new Date().toISOString(),
+        value: moodValue, note, date: todayStr, savedAt: new Date().toISOString(),
       });
       setTodayMood(moodValue);
-
-      // +5 XP pour avoir rempli le journal
       await updateDoc(doc(db, 'users', user.uid), { xp: (profile.xp ?? 0) + 5 });
-
-      // Premium + humeur à risque → analyse Claude
       const isPremium = profile.subscriptionType === 'premium';
       if (isPremium && MOOD_RISK[moodValue]) {
-        const analysis = await getMoodAnalysis(moodValue, note, profile, recentBets);
-        setMoodAnalysis(analysis);
+        const a = await getMoodAnalysis(moodValue, note, profile, recentBets);
+        setMoodAnalysis(a);
       } else {
         setShowMoodModal(false);
       }
@@ -170,9 +162,7 @@ export default function Dashboard() {
     if (!user || !newGoal.title || !newGoal.cost) return;
     setLoading(true);
     try {
-      await addDoc(collection(db, 'users', user.uid, 'goals'), {
-        title: newGoal.title, cost: parseFloat(newGoal.cost), progress: 0,
-      });
+      await addDoc(collection(db, 'users', user.uid, 'goals'), { title: newGoal.title, cost: parseFloat(newGoal.cost), progress: 0 });
       setNewGoal({ title: '', cost: '' });
       setShowAddGoal(false);
     } catch (e) { console.error(e); }
@@ -202,6 +192,7 @@ export default function Dashboard() {
   const levelMeta    = getLevelMeta(profile.xp ?? 0);
   const earnedBadges = ALL_BADGES.filter(b => (profile.badges ?? []).includes(b.id));
   const todayMoodDef = MOODS.find(m => m.value === todayMood);
+  const budgetAlert  = getBudgetAlert(spendPct);
 
   const pieData    = [
     { name: 'Dépensé', value: totalSpent },
@@ -212,6 +203,59 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6 pb-24">
+
+      {/* ── Alerte budget ── */}
+      <AnimatePresence>
+        {budgetAlert && dismissedAlert !== budgetAlert.level && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className={`border-2 rounded-3xl p-5 ${budgetAlert.color}`}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`shrink-0 mt-0.5 ${budgetAlert.icon}`}>
+                {budgetAlert.level === 'critical'
+                  ? <AlertOctagon size={22} />
+                  : <AlertTriangle size={22} />
+                }
+              </div>
+              <div className="flex-1">
+                <p className={`font-black text-sm mb-1 ${budgetAlert.text}`}>{budgetAlert.label}</p>
+                <p className={`text-xs font-medium leading-relaxed ${budgetAlert.text} opacity-80`}>
+                  {budgetAlert.msg(spendPct)}
+                </p>
+                {budgetAlert.level === 'critical' && (
+                  <p className={`text-xs font-black mt-2 ${budgetAlert.text}`}>
+                    💡 Pense à utiliser le mode SOS ou à contacter le 09 74 75 13 13 (Joueurs Info Service)
+                  </p>
+                )}
+              </div>
+              <button onClick={() => setDismissedAlert(budgetAlert.level)} className="text-slate-400 shrink-0">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Barre de progression budget */}
+            <div className="mt-4">
+              <div className="flex justify-between text-xs font-bold mb-1">
+                <span className={budgetAlert.text}>{totalSpent.toFixed(0)}€ dépensé</span>
+                <span className={budgetAlert.text}>{profile.monthlyIncome}€ salaire</span>
+              </div>
+              <div className="h-3 bg-white/50 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, spendPct)}%` }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                  className={`h-full rounded-full ${
+                    budgetAlert.level === 'critical' ? 'bg-red-500' :
+                    budgetAlert.level === 'danger'   ? 'bg-orange-500' : 'bg-amber-400'
+                  }`}
+                />
+              </div>
+              <p className={`text-xs font-black mt-1 text-right ${budgetAlert.text}`}>{spendPct.toFixed(1)}%</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Jours sans pari ── */}
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
@@ -229,7 +273,7 @@ export default function Dashboard() {
         <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12"><Flame size={160} /></div>
       </motion.div>
 
-      {/* ── Humeur du jour + historique 7 jours ── */}
+      {/* ── Journal d'humeur ── */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -238,8 +282,6 @@ export default function Dashboard() {
           </div>
           {todayMood && <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">+5 XP ✓</span>}
         </div>
-
-        {/* Humeur du jour */}
         {todayMood ? (
           <div className="flex items-center gap-3 mb-4">
             <span className="text-3xl">{todayMoodDef?.emoji}</span>
@@ -248,9 +290,7 @@ export default function Dashboard() {
               <p className="text-xs text-slate-400 font-medium">Humeur d'aujourd'hui</p>
             </div>
             <button onClick={() => { setMoodNote(''); setMoodAnalysis(null); setSelectedMood(todayMood); setShowMoodModal(true); }}
-              className="ml-auto text-xs font-bold text-indigo-600 hover:underline">
-              Modifier
-            </button>
+              className="ml-auto text-xs font-bold text-indigo-600 hover:underline">Modifier</button>
           </div>
         ) : (
           <button onClick={() => { setSelectedMood(null); setShowMoodModal(true); }}
@@ -258,8 +298,6 @@ export default function Dashboard() {
             + Ajouter mon humeur du jour (+5 XP)
           </button>
         )}
-
-        {/* Historique 7 jours */}
         {recentMoods.length > 0 && (
           <div className="flex gap-2 justify-between">
             {recentMoods.slice(0, 7).map((m, i) => {
@@ -456,9 +494,7 @@ export default function Dashboard() {
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
               className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
-
               {moodAnalysis ? (
-                // Vue analyse Claude
                 <div>
                   <div className="flex justify-between items-center mb-4">
                     <p className="text-xs font-black text-violet-500 uppercase tracking-wider">Analyse du coach IA</p>
@@ -468,12 +504,9 @@ export default function Dashboard() {
                     <p className="text-slate-700 font-medium leading-relaxed text-sm">{moodAnalysis}</p>
                   </div>
                   <button onClick={() => { setShowMoodModal(false); setMoodAnalysis(null); }}
-                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold">
-                    Compris, merci 💪
-                  </button>
+                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold">Compris, merci 💪</button>
                 </div>
               ) : (
-                // Vue sélection humeur
                 <>
                   <div className="flex justify-between items-center mb-6">
                     <div>
@@ -482,35 +515,23 @@ export default function Dashboard() {
                     </div>
                     <button onClick={() => setShowMoodModal(false)} className="text-slate-400"><X size={22} /></button>
                   </div>
-
-                  {/* Sélecteur humeur */}
                   <div className="flex justify-between mb-6">
                     {MOODS.map(mood => (
-                      <button key={mood.value}
-                        onClick={() => setSelectedMood(mood.value)}
-                        disabled={moodLoading}
+                      <button key={mood.value} onClick={() => setSelectedMood(mood.value)} disabled={moodLoading}
                         className={`flex flex-col items-center gap-2 p-3 rounded-2xl transition-all active:scale-95 ${
-                          selectedMood === mood.value
-                            ? 'bg-violet-100 ring-2 ring-violet-400'
-                            : 'hover:bg-slate-50'
+                          selectedMood === mood.value ? 'bg-violet-100 ring-2 ring-violet-400' : 'hover:bg-slate-50'
                         }`}>
                         <span className="text-3xl">{mood.emoji}</span>
                         <span className="text-[10px] font-bold text-slate-500">{mood.label}</span>
                       </button>
                     ))}
                   </div>
-
-                  {/* Note optionnelle */}
                   <div className="mb-4">
                     <textarea value={moodNote} onChange={e => setMoodNote(e.target.value)}
-                      placeholder="Une note ? (optionnel)"
-                      rows={2}
+                      placeholder="Une note ? (optionnel)" rows={2}
                       className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
                   </div>
-
-                  {/* Bouton valider */}
-                  <button
-                    onClick={() => selectedMood && handleSaveMood(selectedMood)}
+                  <button onClick={() => selectedMood && handleSaveMood(selectedMood)}
                     disabled={!selectedMood || moodLoading}
                     className="w-full py-4 bg-violet-600 text-white rounded-2xl font-black hover:bg-violet-700 transition-all disabled:opacity-40 flex items-center justify-center gap-2">
                     {moodLoading
@@ -527,12 +548,9 @@ export default function Dashboard() {
 
       {/* ── Bouton flottant humeur ── */}
       {!todayMood && (
-        <motion.button
-          initial={{ scale: 0 }} animate={{ scale: 1 }}
-          whileTap={{ scale: 0.9 }}
+        <motion.button initial={{ scale: 0 }} animate={{ scale: 1 }} whileTap={{ scale: 0.9 }}
           onClick={() => { setSelectedMood(null); setShowMoodModal(true); }}
-          className="fixed bottom-24 right-4 w-14 h-14 bg-violet-600 text-white rounded-full shadow-xl flex items-center justify-center z-30"
-        >
+          className="fixed bottom-24 right-4 w-14 h-14 bg-violet-600 text-white rounded-full shadow-xl flex items-center justify-center z-30">
           <SmilePlus size={24} />
         </motion.button>
       )}
