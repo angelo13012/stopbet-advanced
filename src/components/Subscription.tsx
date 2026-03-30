@@ -3,9 +3,20 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useFirebase } from './FirebaseProvider';
 import { app } from '../services/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Star, X, Sparkles, Trophy, TrendingUp, Lock, Gift, Copy, Users } from 'lucide-react';
+import { Check, Star, X, Sparkles, Trophy, TrendingUp, Lock, Gift, Copy, Users, ShieldOff, SmilePlus, Quote, AlertTriangle } from 'lucide-react';
 
 type View = 'main' | 'referral';
+
+const PREMIUM_FEATURES = [
+  { icon: <Sparkles size={15} />,     text: 'Coach IA Claude — analyse personnalisée chaque jour' },
+  { icon: <TrendingUp size={15} />,   text: 'Graphique 12 mois + heatmap 30 jours' },
+  { icon: <Trophy size={15} />,       text: 'Argent perdu vs économisé grâce à ton streak' },
+  { icon: <Check size={15} />,        text: 'Historique complet des rechutes' },
+  { icon: <AlertTriangle size={15} />,text: 'Alertes budget 10% / 20% / 30% de ton salaire' },
+  { icon: <ShieldOff size={15} />,    text: 'Plateformes de paris + liens d\'auto-exclusion' },
+  { icon: <SmilePlus size={15} />,    text: 'Badges journal d\'humeur — streak 7 et 30 jours' },
+  { icon: <Quote size={15} />,        text: 'Citation motivante quotidienne personnalisée' },
+];
 
 export default function Subscription({ onComplete }: { onComplete: () => void }) {
   const { profile, user } = useFirebase();
@@ -20,9 +31,9 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
   const [referralMsg,  setReferralMsg]  = useState('');
   const [copied,       setCopied]       = useState(false);
 
-  const isPremium   = profile?.subscriptionType === 'premium';
-  const trialUsed   = profile?.trialUsed === true;
-  const trialEndsAt = profile?.trialEndsAt;
+  const isPremium     = profile?.subscriptionType === 'premium';
+  const trialUsed     = profile?.trialUsed === true;
+  const trialEndsAt   = profile?.trialEndsAt;
   const trialDaysLeft = trialEndsAt
     ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86400000))
     : null;
@@ -127,7 +138,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
       </div>
 
       <AnimatePresence mode="wait">
-
         {view === 'main' && (
           <motion.div key="main" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col flex-1">
             {isPremium ? (
@@ -152,16 +162,12 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
               </div>
             ) : (
               <>
+                {/* Features card — liste complète */}
                 <div className="bg-indigo-600 p-7 rounded-[40px] text-white shadow-xl mb-6 relative overflow-hidden">
                   <div className="relative z-10">
                     <h3 className="text-xl font-bold mb-4">Pourquoi passer au Premium ?</h3>
-                    <ul className="space-y-3">
-                      {[
-                        { icon: <Sparkles size={16} />, text: 'Coach IA Claude — analyse personnalisée' },
-                        { icon: <TrendingUp size={16} />, text: 'Graphique 12 mois + heatmap' },
-                        { icon: <Trophy size={16} />, text: 'Argent perdu vs économisé' },
-                        { icon: <Check size={16} />, text: 'Historique complet des rechutes' },
-                      ].map(({ icon, text }) => (
+                    <ul className="space-y-2.5">
+                      {PREMIUM_FEATURES.map(({ icon, text }) => (
                         <li key={text} className="flex items-center gap-3">
                           <div className="bg-white/20 p-1.5 rounded-full shrink-0">{icon}</div>
                           <span className="font-medium text-sm">{text}</span>
@@ -207,7 +213,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                     onClick={() => handleSubscribe('yearly')} loading={loading && selectedPlan === 'yearly'} />
                 </div>
 
-                {/* Code parrainage */}
                 <div className="mt-4 p-4 bg-white border border-slate-100 rounded-2xl">
                   <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-1">Tu as un code de parrainage ?</p>
                   <p className="text-xs text-indigo-600 font-bold mb-3">→ Obtiens 15 jours Premium offerts au lieu de 7 !</p>
@@ -302,7 +307,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
             )}
           </motion.div>
         )}
-
       </AnimatePresence>
     </div>
   );

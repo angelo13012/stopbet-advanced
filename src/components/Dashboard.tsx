@@ -55,7 +55,6 @@ export default function Dashboard() {
   const [dismissedAlert, setDismissedAlert] = useState<string | null>(null);
   const [newBadge,       setNewBadge]       = useState<{ emoji: string; name: string } | null>(null);
 
-  // Humeur
   const [showMoodModal, setShowMoodModal] = useState(false);
   const [todayMood,     setTodayMood]     = useState<string | null>(null);
   const [selectedMood,  setSelectedMood]  = useState<string | null>(null);
@@ -95,19 +94,13 @@ export default function Dashboard() {
         const moodsSnap = await getDocs(query(collection(db, 'users', user.uid, 'moods'), orderBy('date', 'desc')));
         const moods = moodsSnap.docs.slice(0, 30).map(d => ({ value: d.data().value, date: d.data().date }));
         setRecentMoods(moods);
-
-        // Calculer le streak de journal (jours consécutifs)
         let streak = 0;
         const today = new Date(); today.setHours(0, 0, 0, 0);
         for (let i = 0; i < moods.length; i++) {
           const expected = new Date(today);
           expected.setDate(today.getDate() - i);
           const expectedStr = expected.toISOString().slice(0, 10);
-          if (moods[i]?.date === expectedStr) {
-            streak++;
-          } else {
-            break;
-          }
+          if (moods[i]?.date === expectedStr) { streak++; } else { break; }
         }
         setMoodStreak(streak);
       } catch {}
@@ -171,28 +164,29 @@ export default function Dashboard() {
         lastMoodDate: todayStr,
       };
 
-      // Vérifier badges journal
-      const earned = [...(profile.badges ?? [])];
-      let badgeEarned = null;
-      if (newStreak >= 7 && !earned.includes('mood_week')) {
-        earned.push('mood_week');
-        updates.badges = earned;
-        badgeEarned = { emoji: '🧘', name: 'Semaine consciente' };
-      } else if (newStreak >= 30 && !earned.includes('mood_month')) {
-        earned.push('mood_month');
-        updates.badges = earned;
-        badgeEarned = { emoji: '🌟', name: 'Mois conscient' };
+      // Badges journal — Premium uniquement
+      const isPremiumUser = profile.subscriptionType === 'premium';
+      if (isPremiumUser) {
+        const earned = [...(profile.badges ?? [])];
+        let badgeEarned = null;
+        if (newStreak >= 7 && !earned.includes('mood_week')) {
+          earned.push('mood_week');
+          updates.badges = earned;
+          badgeEarned = { emoji: '🧘', name: 'Semaine consciente' };
+        } else if (newStreak >= 30 && !earned.includes('mood_month')) {
+          earned.push('mood_month');
+          updates.badges = earned;
+          badgeEarned = { emoji: '🌟', name: 'Mois conscient' };
+        }
+        if (badgeEarned) {
+          setNewBadge(badgeEarned);
+          setTimeout(() => setNewBadge(null), 3000);
+        }
       }
 
       await updateDoc(doc(db, 'users', user.uid), updates);
 
-      if (badgeEarned) {
-        setNewBadge(badgeEarned);
-        setTimeout(() => setNewBadge(null), 3000);
-      }
-
-      const isPremium = profile.subscriptionType === 'premium';
-      if (isPremium && MOOD_RISK[moodValue]) {
+      if (isPremiumUser && MOOD_RISK[moodValue]) {
         const a = await getMoodAnalysis(moodValue, note, profile, recentBets);
         setMoodAnalysis(a);
       } else {
@@ -239,7 +233,7 @@ export default function Dashboard() {
   const todayMoodDef = MOODS.find(m => m.value === todayMood);
   const budgetAlert  = getBudgetAlert(spendPct);
 
-  const pieData  = [
+  const pieData    = [
     { name: 'Dépensé', value: totalSpent },
     { name: 'Restant', value: Math.max(0, profile.monthlyIncome - totalSpent) },
   ];
@@ -249,7 +243,7 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6 pb-24">
 
-      {/* ── Popup badge gagné ── */}
+      {/* ── Popup badge gagné — Premium ── */}
       <AnimatePresence>
         {newBadge && (
           <motion.div
@@ -319,15 +313,25 @@ export default function Dashboard() {
         <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12"><Flame size={160} /></div>
       </motion.div>
 
-      {/* ── Citation du jour ── */}
-      <div className="bg-slate-900 p-5 rounded-2xl relative overflow-hidden">
-        <div className="flex gap-3 items-start relative z-10">
-          <Quote size={18} className="text-indigo-400 shrink-0 mt-0.5" />
-          <p className="text-white font-medium leading-relaxed text-sm italic">{dailyQuote}</p>
+      {/* ── Citation du jour — Premium uniquement ── */}
+      {isPremium ? (
+        <div className="bg-slate-900 p-5 rounded-2xl relative overflow-hidden">
+          <div className="flex gap-3 items-start relative z-10">
+            <Quote size={18} className="text-indigo-400 shrink-0 mt-0.5" />
+            <p className="text-white font-medium leading-relaxed text-sm italic">{dailyQuote}</p>
+          </div>
+          <p className="text-slate-500 text-xs font-bold mt-2 ml-7 relative z-10">Citation du jour</p>
+          <div className="absolute -right-4 -bottom-4 opacity-5 text-[80px]">💬</div>
         </div>
-        <p className="text-slate-500 text-xs font-bold mt-2 ml-7 relative z-10">Citation du jour</p>
-        <div className="absolute -right-4 -bottom-4 opacity-5 text-[80px]">💬</div>
-      </div>
+      ) : (
+        <div className="bg-slate-100 p-5 rounded-2xl flex items-center gap-3">
+          <Lock size={16} className="text-slate-400 shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-slate-500">Citation motivante quotidienne</p>
+            <p className="text-xs text-indigo-500 font-bold">Premium uniquement</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Journal d'humeur ── */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
@@ -337,7 +341,7 @@ export default function Dashboard() {
             <p className="text-sm font-bold text-slate-900 uppercase tracking-wider">Journal d'humeur</p>
           </div>
           <div className="flex items-center gap-2">
-            {moodStreak > 0 && (
+            {isPremium && moodStreak > 0 && (
               <span className="text-xs font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
                 🔥 {moodStreak} jour{moodStreak > 1 ? 's' : ''} d'affilée
               </span>
@@ -362,7 +366,6 @@ export default function Dashboard() {
           </button>
         )}
 
-        {/* Historique 7 jours */}
         {recentMoods.length > 0 && (
           <div className="flex gap-2 justify-between">
             {recentMoods.slice(0, 7).map((m, i) => {
@@ -378,8 +381,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Progression badge journal */}
-        {moodStreak > 0 && moodStreak < 30 && (
+        {/* Progression badge journal — Premium uniquement */}
+        {isPremium && moodStreak > 0 && moodStreak < 30 && (
           <div className="mt-3 pt-3 border-t border-slate-50">
             <div className="flex justify-between text-xs font-bold mb-1">
               <span className="text-slate-400">{moodStreak < 7 ? 'Badge Semaine consciente 🧘' : 'Badge Mois conscient 🌟'}</span>
