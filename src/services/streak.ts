@@ -6,7 +6,6 @@ import {
 } from '../types';
 
 export function computeStreakFromLastBet(lastBetDate?: string, createdAt?: string): number {
-  // Si pas de rechute, on compte depuis la création du compte
   const startDate = lastBetDate ?? createdAt;
   if (!startDate) return 0;
   const last  = new Date(startDate); last.setHours(0, 0, 0, 0);
@@ -34,10 +33,9 @@ async function syncLeaderboard(userId: string, data: {
 }
 
 export async function syncStreakAndXP(userId: string, profile: UserProfile): Promise<void> {
-  // On passe createdAt comme fallback si pas de lastBetDate
   const realStreak = computeStreakFromLastBet(profile.lastBetDate, profile.createdAt);
 
-  if (realStreak <= profile.streakCount) {
+  if (realStreak <= profile.streakCount && profile.lastBetDate) {
     if (profile.pseudo) {
       await syncLeaderboard(userId, {
         pseudo:      profile.pseudo,
