@@ -92,7 +92,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(`Rejoins-moi sur StopBet et arrête de parier ! Utilise mon code ${referralCode} pour obtenir 15 jours Premium offerts. stopbet-app-angel.vercel.app`);
+    navigator.clipboard.writeText(`Rejoins-moi sur StopBet et arrête de parier ! Utilise mon code ${referralCode} pour obtenir 15 jours Premium offerts. stopbet.fr`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -162,7 +162,6 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
               </div>
             ) : (
               <>
-                {/* Features card — liste complète */}
                 <div className="bg-indigo-600 p-7 rounded-[40px] text-white shadow-xl mb-6 relative overflow-hidden">
                   <div className="relative z-10">
                     <h3 className="text-xl font-bold mb-4">Pourquoi passer au Premium ?</h3>
