@@ -18,6 +18,7 @@ import Subscription from './components/Subscription';
 import Leaderboard from './components/Leaderboard';
 import SOSMode from './components/SOSMode';
 import CGU from './components/CGU';
+import Landing from './components/Landing';
 import { syncStreakAndXP } from './services/streak';
 import {
   requestNotificationPermission,
@@ -53,6 +54,7 @@ export default function App() {
   const [showCGU,            setShowCGU]            = useState(false);
   const [notifLoading,       setNotifLoading]       = useState(false);
   const [foregroundNotif,    setForegroundNotif]    = useState<{ title: string; body: string } | null>(null);
+  const [showLanding,        setShowLanding]        = useState(true);
 
   useEffect(() => {
     if (user && profile) {
@@ -81,7 +83,10 @@ export default function App() {
     );
   }
 
-  if (!user)    return <Auth />;
+  if (!user) {
+    if (showLanding) return <Landing onStart={() => setShowLanding(false)} onLogin={() => setShowLanding(false)} />;
+    return <Auth />;
+  }
   if (!profile) return <Onboarding />;
 
   const notifEnabled   = profile.notificationsEnabled === true;
@@ -100,11 +105,6 @@ export default function App() {
       }
     } catch (e) { console.error(e); }
     finally { setNotifLoading(false); }
-  };
-
-  const handleResetToFree = async () => {
-    if (!user) return;
-    await updateDoc(doc(db, 'users', user.uid), { subscriptionType: 'free', subscriptionStatus: 'active' });
   };
 
   const renderContent = () => {
@@ -150,7 +150,6 @@ export default function App() {
 
           <div className="space-y-3">
 
-            {/* Plateformes de paris — Premium uniquement */}
             {profile.subscriptionType === 'premium' ? (
               <button onClick={() => setShowPlatformsModal(true)}
                 className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
@@ -181,7 +180,6 @@ export default function App() {
               </button>
             )}
 
-            {/* Contacts d'urgence */}
             <button onClick={() => setShowContactsModal(true)}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
@@ -198,7 +196,6 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
-            {/* Notifications */}
             {notifSupported && (
               <div className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3">
@@ -217,7 +214,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Classement */}
             <button onClick={() => setActiveTab('leaderboard')}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
@@ -230,7 +226,6 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
-            {/* Abonnement */}
             <button onClick={() => setActiveTab('subscription')}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
@@ -243,7 +238,6 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
-            {/* CGU & Confidentialité */}
             <button onClick={() => setShowCGU(true)}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
@@ -254,11 +248,6 @@ export default function App() {
                 </div>
               </div>
               <ChevronRight size={20} className="text-slate-400" />
-            </button>
-
-            <button onClick={handleResetToFree}
-              className="w-full flex items-center gap-3 p-4 bg-orange-50 text-orange-600 rounded-2xl font-semibold">
-              <CreditCard size={20} /> Passer en Free (test)
             </button>
 
             <button onClick={() => auth.signOut()}
@@ -328,33 +317,28 @@ export default function App() {
           <NavBtn active={activeTab === 'profile'}     onClick={() => setActiveTab('profile')}     icon={<User size={21} />}            label="Profil" />
         </nav>
 
-        {/* Modal Pseudo */}
         <AnimatePresence>
           {showPseudoModal && user && (
             <PseudoModal currentPseudo={profile.pseudo} userId={user.uid} profile={profile} onClose={() => setShowPseudoModal(false)} />
           )}
         </AnimatePresence>
 
-        {/* Modal Contacts */}
         <AnimatePresence>
           {showContactsModal && user && (
             <ContactsModal contacts={profile.emergencyContacts ?? []} userId={user.uid} onClose={() => setShowContactsModal(false)} />
           )}
         </AnimatePresence>
 
-        {/* Modal Plateformes */}
         <AnimatePresence>
           {showPlatformsModal && user && (
             <PlatformsModal savedPlatforms={savedPlatforms} userId={user.uid} onClose={() => setShowPlatformsModal(false)} />
           )}
         </AnimatePresence>
 
-        {/* CGU */}
         <AnimatePresence>
           {showCGU && <CGU onClose={() => setShowCGU(false)} />}
         </AnimatePresence>
 
-        {/* Mode SOS */}
         <AnimatePresence>
           {showSOS && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -367,7 +351,6 @@ export default function App() {
   );
 }
 
-// ── Modal plateformes de paris ──
 function PlatformsModal({ savedPlatforms, userId, onClose }: {
   savedPlatforms: string[]; userId: string; onClose: () => void;
 }) {
@@ -463,7 +446,6 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
   );
 }
 
-// ── Modal contacts d'urgence ──
 function ContactsModal({ contacts, userId, onClose }: {
   contacts: EmergencyContact[]; userId: string; onClose: () => void;
 }) {
@@ -558,7 +540,6 @@ function ContactsModal({ contacts, userId, onClose }: {
   );
 }
 
-// ── Modal pseudo ──
 function PseudoModal({ currentPseudo, userId, profile, onClose }: {
   currentPseudo?: string; userId: string; profile: any; onClose: () => void;
 }) {
