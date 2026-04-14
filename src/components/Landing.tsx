@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import {
-  Shield, TrendingUp, Brain, Trophy, Mic, Heart,
-  ChevronRight, Star, AlertTriangle, Clock, Wallet,
-  Users, CheckCircle, ArrowRight
+  Shield, TrendingUp, Brain, Trophy,
+  AlertTriangle, Clock, Wallet,
+  CheckCircle, ArrowRight
 } from 'lucide-react';
 
 export default function Landing({ onStart, onLogin }: { onStart: () => void; onLogin: () => void }) {
@@ -47,9 +47,9 @@ export default function Landing({ onStart, onLogin }: { onStart: () => void; onL
       <section className="px-6 pb-16">
         <div className="grid grid-cols-3 gap-3 max-w-md mx-auto">
           {[
-            { value: "97%", label: "des utilisateurs tiennent 7 jours" },
             { value: "24/7", label: "coach IA disponible" },
-            { value: "0€", label: "pour commencer" },
+            { value: "100%", label: "gratuit pour commencer" },
+            { value: "2 min", label: "pour s'inscrire" },
           ].map(({ value, label }) => (
             <div key={value} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
               <p className="text-xl font-black text-indigo-400">{value}</p>
@@ -63,7 +63,7 @@ export default function Landing({ onStart, onLogin }: { onStart: () => void; onL
       <section className="px-6 pb-16">
         <div className="max-w-md mx-auto">
           <h2 className="text-2xl font-black text-center mb-2">Tout ce qu'il faut pour arrêter</h2>
-          <p className="text-slate-500 text-center text-sm mb-10">Des outils conçus par des experts en addiction</p>
+          <p className="text-slate-500 text-center text-sm mb-10">Des outils concrets pour reprendre le contrôle</p>
 
           <div className="space-y-4">
             {[
@@ -82,32 +82,6 @@ export default function Landing({ onStart, onLogin }: { onStart: () => void; onL
                   <h3 className="font-black text-white text-sm mb-1">{title}</h3>
                   <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── TÉMOIGNAGES ── */}
-      <section className="px-6 pb-16">
-        <div className="max-w-md mx-auto">
-          <h2 className="text-2xl font-black text-center mb-2">Ils ont arrêté grâce à StopBet</h2>
-          <p className="text-slate-500 text-center text-sm mb-10">Des histoires vraies de personnes comme vous</p>
-
-          <div className="space-y-4">
-            {[
-              { name: "Karim, 24 ans", text: "Je perdais 500€ par mois sur Winamax. Grâce au mode SOS et au suivi quotidien, ça fait 4 mois que j'ai arrêté. J'ai économisé 2000€.", stars: 5 },
-              { name: "Léa, 29 ans", text: "Mon copain m'a fait découvrir StopBet. Le coach IA m'a aidée à comprendre pourquoi je pariais. Aujourd'hui je suis libre.", stars: 5 },
-              { name: "Thomas, 31 ans", text: "Le classement m'a motivé à tenir. Voir ma série de jours sans pari augmenter, c'est mieux que n'importe quel gain.", stars: 5 },
-            ].map(({ name, text, stars }) => (
-              <div key={name} className="p-5 bg-slate-900 border border-slate-800 rounded-2xl">
-                <div className="flex gap-1 mb-3">
-                  {Array.from({ length: stars }).map((_, i) => (
-                    <Star key={i} size={14} className="text-amber-400 fill-amber-400" />
-                  ))}
-                </div>
-                <p className="text-sm text-slate-300 leading-relaxed mb-3">"{text}"</p>
-                <p className="text-xs font-bold text-slate-500">{name}</p>
               </div>
             ))}
           </div>
@@ -160,7 +134,7 @@ export default function Landing({ onStart, onLogin }: { onStart: () => void; onL
       <section className="px-6 pb-20">
         <div className="max-w-md mx-auto text-center">
           <h2 className="text-2xl font-black mb-3">Prêt à reprendre le contrôle ?</h2>
-          <p className="text-slate-500 text-sm mb-8">Rejoignez des milliers de personnes qui ont dit stop aux paris.</p>
+          <p className="text-slate-500 text-sm mb-8">Faites le premier pas aujourd'hui. C'est gratuit.</p>
 
           <motion.button onClick={onStart} whileTap={{ scale: 0.96 }}
             className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-base shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 mb-4">
