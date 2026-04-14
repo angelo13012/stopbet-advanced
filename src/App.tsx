@@ -3,7 +3,7 @@ import {
   LayoutDashboard, TrendingUp, PlusCircle, User,
   CreditCard, LogOut, ChevronRight, Trophy,
   AlertTriangle, AtSign, Check, X, Pencil, Bell, BellOff,
-  Phone, Plus, Trash2, ShieldOff, ExternalLink, Lock, Shield,
+  Phone, Plus, Trash2, ShieldOff, ExternalLink, Lock, Shield, MessageCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
@@ -19,6 +19,7 @@ import Leaderboard from './components/Leaderboard';
 import SOSMode from './components/SOSMode';
 import CGU from './components/CGU';
 import Landing from './components/Landing';
+import Support from './components/Support';
 import { syncStreakAndXP } from './services/streak';
 import {
   requestNotificationPermission,
@@ -29,7 +30,7 @@ import {
 import { auth, db } from './services/firebase';
 import { EmergencyContact } from './types';
 
-type Tab = 'dashboard' | 'progress' | 'leaderboard' | 'log' | 'profile' | 'subscription';
+type Tab = 'dashboard' | 'progress' | 'leaderboard' | 'log' | 'profile' | 'subscription' | 'support';
 
 const PLATFORMS = [
   { id: 'winamax',      name: 'Winamax',        url: 'https://www.winamax.fr/compte/auto-exclusion' },
@@ -114,6 +115,7 @@ export default function App() {
       case 'leaderboard':  return <Leaderboard />;
       case 'log':          return <BetLogger onComplete={() => setActiveTab('dashboard')} />;
       case 'subscription': return <Subscription onComplete={() => setActiveTab('profile')} />;
+      case 'support':      return <Support onBack={() => setActiveTab('profile')} />;
       case 'profile':      return (
         <div className="p-6">
           <h2 className="text-2xl font-bold text-slate-900 mb-2">Mon profil</h2>
@@ -245,6 +247,18 @@ export default function App() {
                 <div className="text-left">
                   <p className="font-semibold text-slate-900">CGU & Confidentialité</p>
                   <p className="text-sm text-slate-500">Mentions légales et politique de données</p>
+                </div>
+              </div>
+              <ChevronRight size={20} className="text-slate-400" />
+            </button>
+
+            <button onClick={() => setActiveTab('support')}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><MessageCircle size={20} /></div>
+                <div className="text-left">
+                  <p className="font-semibold text-slate-900">Support & aide</p>
+                  <p className="text-sm text-slate-500">Chatbot, contact, signaler un bug</p>
                 </div>
               </div>
               <ChevronRight size={20} className="text-slate-400" />
