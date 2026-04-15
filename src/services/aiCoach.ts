@@ -1,7 +1,6 @@
 import { UserProfile, Bet, Goal } from '../types';
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string | undefined;
-
 async function claude(system: string, user: string, maxTokens = 600): Promise<string> {
   if (!API_KEY) return '';
   try {
