@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { doc, updateDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useFirebase } from './components/FirebaseProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import Auth from './components/Auth';
@@ -27,7 +28,7 @@ import {
   listenToForegroundMessages,
   areNotificationsSupported,
 } from './services/notifications';
-import { auth, db } from './services/firebase';
+import { auth, db, app } from './services/firebase';
 import { EmergencyContact } from './types';
 
 type Tab = 'dashboard' | 'progress' | 'leaderboard' | 'log' | 'profile' | 'subscription' | 'support';
@@ -53,6 +54,7 @@ export default function App() {
   const [showContactsModal,  setShowContactsModal]  = useState(false);
   const [showPlatformsModal, setShowPlatformsModal] = useState(false);
   const [showCGU,            setShowCGU]            = useState(false);
+  const [showDeleteModal,    setShowDeleteModal]    = useState(false);
   const [notifLoading,       setNotifLoading]       = useState(false);
   const [foregroundNotif,    setForegroundNotif]    = useState<{ title: string; body: string } | null>(null);
   const [showLanding,        setShowLanding]        = useState(true);
@@ -268,6 +270,12 @@ export default function App() {
               className="w-full flex items-center gap-3 p-4 bg-red-50 text-red-600 rounded-2xl font-semibold">
               <LogOut size={20} /> Déconnexion
             </button>
+
+            <button onClick={() => setShowDeleteModal(true)}
+              className="w-full flex items-center gap-3 p-4 bg-white border border-red-100 text-red-400 rounded-2xl font-semibold text-sm">
+              <Trash2 size={18} /> Supprimer mon compte
+            </button>
+
           </div>
         </div>
       );
@@ -354,6 +362,12 @@ export default function App() {
         </AnimatePresence>
 
         <AnimatePresence>
+          {showDeleteModal && user && (
+            <DeleteAccountModal onClose={() => setShowDeleteModal(false)} />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
           {showSOS && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <SOSMode onClose={() => setShowSOS(false)} />
@@ -362,6 +376,63 @@ export default function App() {
         </AnimatePresence>
       </div>
     </ErrorBoundary>
+  );
+}
+
+function DeleteAccountModal({ onClose }: { onClose: () => void }) {
+  const [confirm,  setConfirm]  = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState('');
+
+  const handleDelete = async () => {
+    if (confirm !== 'SUPPRIMER') { setError('Tape exactement SUPPRIMER pour confirmer'); return; }
+    setLoading(true); setError('');
+    try {
+      const fns = getFunctions(app, 'us-central1');
+      await httpsCallable(fns, 'deleteAccount')({});
+      await auth.signOut();
+    } catch (e: any) {
+      setError(e.message || 'Une erreur est survenue');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
+      <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-black text-slate-900">Supprimer mon compte</h3>
+          <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
+        </div>
+        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-6">
+          <p className="text-sm font-bold text-red-700 mb-1">⚠️ Action irréversible</p>
+          <p className="text-xs text-red-600 font-medium leading-relaxed">
+            Toutes tes données seront définitivement supprimées : progression, streak, historique, abonnement. Cette action est impossible à annuler.
+          </p>
+        </div>
+        <p className="text-xs font-black text-slate-500 uppercase tracking-wider mb-2">
+          Tape <span className="text-red-500">SUPPRIMER</span> pour confirmer
+        </p>
+        <input
+          value={confirm}
+          onChange={e => { setConfirm(e.target.value); setError(''); }}
+          placeholder="SUPPRIMER"
+          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-red-400 mb-3"
+        />
+        {error && <p className="text-xs text-red-500 font-medium mb-3">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} disabled={loading}
+            className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm">
+            Annuler
+          </button>
+          <button onClick={handleDelete} disabled={loading || confirm !== 'SUPPRIMER'}
+            className="flex-1 py-3 bg-red-500 text-white rounded-2xl font-bold text-sm disabled:opacity-40">
+            {loading ? 'Suppression…' : 'Supprimer définitivement'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 

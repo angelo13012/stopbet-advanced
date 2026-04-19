@@ -122,6 +122,38 @@ exports.cancelSubscription = onCall({ secrets: [stripeSecret] }, async (request)
   }
 });
 
+exports.deleteAccount = onCall({ secrets: [stripeSecret] }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  const uid = request.auth.uid;
+  try {
+    // Annuler l'abonnement Stripe si actif
+    const userDoc  = await admin.firestore().collection("users").doc(uid).get();
+    const userData = userDoc.data();
+    if (userData?.stripeSubscriptionId && userData?.subscriptionStatus === "active") {
+      const stripeClient = stripe(stripeSecret.value());
+      await stripeClient.subscriptions.cancel(userData.stripeSubscriptionId).catch(() => {});
+    }
+    // Supprimer sous-collections
+    const deleteCollection = async (colPath) => {
+      const snap = await admin.firestore().collection(colPath).get();
+      const batch = admin.firestore().batch();
+      snap.docs.forEach(d => batch.delete(d.ref));
+      if (snap.docs.length > 0) await batch.commit();
+    };
+    await deleteCollection(`users/${uid}/bets`);
+    await deleteCollection(`users/${uid}/goals`);
+    await deleteCollection(`users/${uid}/moods`);
+    // Supprimer doc user + leaderboard
+    await admin.firestore().collection("users").doc(uid).delete();
+    await admin.firestore().collection("leaderboard").doc(uid).delete().catch(() => {});
+    // Supprimer compte Auth
+    await admin.auth().deleteUser(uid);
+    return { success: true };
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
+  }
+});
+
 exports.generateReferralCode = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const userDoc  = await admin.firestore().collection("users").doc(request.auth.uid).get();
