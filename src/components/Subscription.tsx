@@ -32,6 +32,7 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
   const [copied,       setCopied]       = useState(false);
 
   const isPremium     = profile?.subscriptionType === 'premium';
+  const isCanceling   = profile?.subscriptionStatus === 'canceling';
   const trialUsed     = profile?.trialUsed === true;
   const trialEndsAt   = profile?.trialEndsAt;
   const trialDaysLeft = trialEndsAt
@@ -149,8 +150,14 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                   {trialDaysLeft !== null && trialDaysLeft > 0 && (
                     <p className="text-amber-600 font-bold text-sm mt-2">⏳ Essai gratuit — {trialDaysLeft} jour{trialDaysLeft > 1 ? 's' : ''} restant{trialDaysLeft > 1 ? 's' : ''}</p>
                   )}
+                  {isCanceling && profile?.cancelAt && (
+                    <p className="text-red-500 font-bold text-sm mt-2">
+                      ⚠️ Résiliation prévue le {new Date(profile.cancelAt).toLocaleDateString('fr-FR')} — accès actif jusqu'à cette date
+                    </p>
+                  )}
                   <p className="text-slate-600 font-medium mt-2">Toutes les fonctionnalités avancées sont débloquées.</p>
                 </motion.div>
+
                 <button onClick={() => setView('referral')}
                   className="w-full flex items-center gap-3 p-4 bg-indigo-50 border border-indigo-100 rounded-2xl">
                   <div className="p-2 bg-indigo-600 rounded-xl text-white"><Users size={18} /></div>
@@ -159,6 +166,8 @@ export default function Subscription({ onComplete }: { onComplete: () => void })
                     <p className="text-xs text-slate-500">Gagnez 1 mois offert pour 3 filleuls</p>
                   </div>
                 </button>
+
+                {!isCanceling && <CancelButton onCanceled={onComplete} />}
               </div>
             ) : (
               <>
@@ -340,5 +349,54 @@ function PlanCard({ title, price, period, description, highlight, onClick, loadi
         </div>
       )}
     </button>
+  );
+}
+
+function CancelButton({ onCanceled }: { onCanceled: () => void }) {
+  const { user } = useFirebase();
+  const [confirm, setConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState('');
+
+  const handleCancel = async () => {
+    if (!user) return;
+    setLoading(true); setError('');
+    try {
+      const fns = getFunctions(app, 'us-central1');
+      await httpsCallable(fns, 'cancelSubscription')({});
+      onCanceled();
+    } catch (e: any) {
+      setError(e.message || 'Une erreur est survenue');
+    } finally {
+      setLoading(false);
+      setConfirm(false);
+    }
+  };
+
+  if (!confirm) {
+    return (
+      <button onClick={() => setConfirm(true)}
+        className="w-full py-3 border-2 border-red-200 text-red-500 rounded-2xl font-bold text-sm hover:bg-red-50 transition-all">
+        Résilier mon abonnement
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-red-50 border border-red-200 rounded-2xl p-4 space-y-3">
+      <p className="text-sm font-bold text-slate-800">Tu vas résilier ton abonnement.</p>
+      <p className="text-xs text-slate-500">Tu garderas accès Premium jusqu'à la fin de la période en cours, puis repasseras en version gratuite.</p>
+      {error && <p className="text-xs text-red-600 font-medium">{error}</p>}
+      <div className="flex gap-2">
+        <button onClick={() => setConfirm(false)} disabled={loading}
+          className="flex-1 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm">
+          Annuler
+        </button>
+        <button onClick={handleCancel} disabled={loading}
+          className="flex-1 py-2.5 bg-red-500 text-white rounded-xl font-bold text-sm disabled:opacity-50">
+          {loading ? 'En cours…' : 'Confirmer la résiliation'}
+        </button>
+      </div>
+    </div>
   );
 }

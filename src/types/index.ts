@@ -26,7 +26,12 @@ export interface UserProfile {
 
   // Subscription
   subscriptionType: 'free' | 'premium';
-  subscriptionStatus: 'active' | 'canceled' | 'expired';
+  subscriptionStatus: 'active' | 'canceling' | 'canceled' | 'expired';
+  subscriptionPlan?: 'monthly' | 'yearly';
+  subscribedAt?: string;
+  stripeSubscriptionId?: string;
+  currentPeriodEnd?: string;
+  cancelAt?: string;
   trialUsed?: boolean;
   trialEndsAt?: string;
   isTrial?: boolean;

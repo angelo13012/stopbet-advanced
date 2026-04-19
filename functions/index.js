@@ -11,7 +11,6 @@ const stripeSecret = defineSecret("STRIPE_SECRET");
 const PRICES      = { monthly: 349, yearly: 3000 };
 const VALID_PLANS = ['monthly', 'yearly'];
 
-// ── Checkout normal ──
 exports.createCheckoutSession = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const { plan, successUrl, cancelUrl } = request.data;
@@ -32,7 +31,6 @@ exports.createCheckoutSession = onCall({ secrets: [stripeSecret] }, async (reque
   } catch (error) { throw new HttpsError("internal", error.message); }
 });
 
-// ── Checkout avec essai 7 jours ──
 exports.createTrialSession = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const { plan, successUrl, cancelUrl } = request.data;
@@ -57,15 +55,14 @@ exports.createTrialSession = onCall({ secrets: [stripeSecret] }, async (request)
   } catch (error) { throw new HttpsError("internal", error.message); }
 });
 
-// ── Confirmer le checkout ──
 exports.confirmCheckout = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const { sessionId, plan, trial } = request.data;
   if (!sessionId || !VALID_PLANS.includes(plan)) throw new HttpsError("invalid-argument", "Données invalides");
   const stripeClient = stripe(stripeSecret.value());
   try {
-    const session     = await stripeClient.checkout.sessions.retrieve(sessionId);
-    const isTrial     = trial === true || session.metadata?.trial === "true";
+    const session = await stripeClient.checkout.sessions.retrieve(sessionId, { expand: ['subscription'] });
+    const isTrial = trial === true || session.metadata?.trial === "true";
     const validStatus = isTrial ? ["no_payment_required", "paid"] : ["paid"];
     if (!validStatus.includes(session.payment_status)) throw new HttpsError("failed-precondition", "Paiement non confirme");
     if (!isTrial) {
@@ -75,9 +72,26 @@ exports.confirmCheckout = onCall({ secrets: [stripeSecret] }, async (request) =>
       if (paidAmount !== expectedAmount) throw new HttpsError("permission-denied", "Montant de paiement invalide");
     }
     if (session.metadata?.userId !== request.auth.uid) throw new HttpsError("permission-denied", "Session invalide");
-    const trialEndsAt  = isTrial ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
-    const updateData   = { subscriptionType: "premium", subscriptionStatus: "active", subscriptionPlan: plan, subscribedAt: new Date().toISOString(), stripeSessionId: sessionId };
-    if (isTrial) { updateData.trialUsed = true; updateData.trialEndsAt = trialEndsAt; updateData.isTrial = true; }
+    const subscription     = session.subscription;
+    const subscriptionId   = typeof subscription === 'string' ? subscription : subscription?.id;
+    const currentPeriodEnd = subscription?.current_period_end
+      ? new Date(subscription.current_period_end * 1000).toISOString()
+      : null;
+    const trialEndsAt = isTrial ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : null;
+    const updateData  = {
+      subscriptionType: "premium",
+      subscriptionStatus: "active",
+      subscriptionPlan: plan,
+      subscribedAt: new Date().toISOString(),
+      stripeSessionId: sessionId,
+      stripeSubscriptionId: subscriptionId ?? null,
+      currentPeriodEnd: currentPeriodEnd ?? null,
+    };
+    if (isTrial) {
+      updateData.trialUsed   = true;
+      updateData.trialEndsAt = trialEndsAt;
+      updateData.isTrial     = true;
+    }
     await admin.firestore().collection("users").doc(request.auth.uid).update(updateData);
     return { success: true, isTrial, trialEndsAt };
   } catch (error) {
@@ -86,7 +100,28 @@ exports.confirmCheckout = onCall({ secrets: [stripeSecret] }, async (request) =>
   }
 });
 
-// ── Générer code parrainage ──
+exports.cancelSubscription = onCall({ secrets: [stripeSecret] }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  const userDoc  = await admin.firestore().collection("users").doc(request.auth.uid).get();
+  const userData = userDoc.data();
+  if (!userData?.stripeSubscriptionId) throw new HttpsError("not-found", "Aucun abonnement actif trouvé");
+  if (userData?.subscriptionStatus === "canceling") throw new HttpsError("failed-precondition", "Résiliation déjà en cours");
+  const stripeClient = stripe(stripeSecret.value());
+  try {
+    const subscription = await stripeClient.subscriptions.update(userData.stripeSubscriptionId, {
+      cancel_at_period_end: true,
+    });
+    const cancelAt = new Date(subscription.cancel_at * 1000).toISOString();
+    await admin.firestore().collection("users").doc(request.auth.uid).update({
+      subscriptionStatus: "canceling",
+      cancelAt,
+    });
+    return { success: true, cancelAt };
+  } catch (error) {
+    throw new HttpsError("internal", error.message);
+  }
+});
+
 exports.generateReferralCode = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const userDoc  = await admin.firestore().collection("users").doc(request.auth.uid).get();
@@ -97,7 +132,6 @@ exports.generateReferralCode = onCall({ secrets: [stripeSecret] }, async (reques
   return { code };
 });
 
-// ── Appliquer code parrainage ──
 exports.applyReferralCode = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const { code } = request.data;
@@ -120,140 +154,67 @@ exports.applyReferralCode = onCall({ secrets: [stripeSecret] }, async (request) 
   return { success: true, bonusEndsAt, referrerCount: newCount };
 });
 
-// ── NOTIFICATIONS PUSH — Matin 8h ──
 exports.sendMorningNotifications = onSchedule(
   { schedule: "0 8 * * *", timeZone: "Europe/Paris" },
   async () => {
-    const usersSnap = await admin.firestore()
-      .collection("users")
-      .where("notificationsEnabled", "==", true)
-      .where("fcmToken", "!=", null)
-      .get();
-
+    const usersSnap = await admin.firestore().collection("users").where("notificationsEnabled", "==", true).where("fcmToken", "!=", null).get();
     const messages = usersSnap.docs.map(doc => {
-      const data    = doc.data();
-      const streak  = data.streakCount ?? 0;
+      const data = doc.data();
+      const streak = data.streakCount ?? 0;
       const isPremium = data.subscriptionType === "premium";
-
       let body = "";
-      if (streak === 0)        body = "Aujourd'hui est un nouveau départ. Tu peux le faire ! 💪";
-      else if (streak < 7)     body = `${streak} jour${streak > 1 ? 's' : ''} sans pari. Continue sur cette lancée ! 🔥`;
-      else if (streak < 30)    body = `${streak} jours — tu es sur la bonne voie. Chaque jour compte. ⚡`;
-      else                     body = `${streak} jours sans pari — tu es exceptionnel. 👑`;
-
+      if (streak === 0)     body = "Aujourd'hui est un nouveau départ. Tu peux le faire ! 💪";
+      else if (streak < 7)  body = `${streak} jour${streak > 1 ? 's' : ''} sans pari. Continue sur cette lancée ! 🔥`;
+      else if (streak < 30) body = `${streak} jours — tu es sur la bonne voie. Chaque jour compte. ⚡`;
+      else                  body = `${streak} jours sans pari — tu es exceptionnel. 👑`;
       if (isPremium) body += " (Coach IA t'attend dans l'app)";
-
-      return {
-        token:        data.fcmToken,
-        notification: { title: "Bonjour " + (data.firstName ?? "") + " 👋", body },
-        webpush: {
-          notification: { icon: "/icon-192.png", badge: "/icon-192.png", vibrate: [200, 100, 200] },
-          fcmOptions:   { link: "https://stopbet-app-angel.vercel.app" },
-        },
-      };
+      return { token: data.fcmToken, notification: { title: "Bonjour " + (data.firstName ?? "") + " 👋", body }, webpush: { notification: { icon: "/icon-192.png", badge: "/icon-192.png", vibrate: [200, 100, 200] }, fcmOptions: { link: "https://stopbet-app-angel.vercel.app" } } };
     });
-
-    // Envoyer par lots de 500
     const chunks = [];
     for (let i = 0; i < messages.length; i += 500) chunks.push(messages.slice(i, i + 500));
-    for (const chunk of chunks) {
-      await admin.messaging().sendEach(chunk);
-    }
-
+    for (const chunk of chunks) await admin.messaging().sendEach(chunk);
     console.log(`Morning notifications sent to ${messages.length} users`);
   }
 );
 
-// ── NOTIFICATIONS PUSH — Soir 20h ──
 exports.sendEveningNotifications = onSchedule(
   { schedule: "0 20 * * *", timeZone: "Europe/Paris" },
   async () => {
-    const usersSnap = await admin.firestore()
-      .collection("users")
-      .where("notificationsEnabled", "==", true)
-      .where("fcmToken", "!=", null)
-      .get();
-
+    const usersSnap = await admin.firestore().collection("users").where("notificationsEnabled", "==", true).where("fcmToken", "!=", null).get();
     const now      = new Date();
     const todayStr = now.toISOString().slice(0, 10);
-
-    const messages = usersSnap.docs
-      .map(doc => {
-        const data   = doc.data();
-        const streak = data.streakCount ?? 0;
-
-        // Vérifier si l'utilisateur n'a pas parié aujourd'hui
-        const lastBetDate = data.lastBetDate ? data.lastBetDate.slice(0, 10) : null;
-        const betToday    = lastBetDate === todayStr;
-
-        if (betToday) return null; // Pas de notif si rechute aujourd'hui
-
-        const body = streak > 0
-          ? `Tu as tenu toute la journée ! ${streak} jour${streak > 1 ? 's' : ''} sans pari. +10 XP gagné 🎉`
-          : "Une nouvelle journée sans pari s'achève. Demain est une nouvelle chance. 💪";
-
-        return {
-          token:        data.fcmToken,
-          notification: { title: "Bravo pour aujourd'hui ! 🌙", body },
-          webpush: {
-            notification: { icon: "/icon-192.png", badge: "/icon-192.png" },
-            fcmOptions:   { link: "https://stopbet-app-angel.vercel.app" },
-          },
-        };
-      })
-      .filter(Boolean);
-
+    const messages = usersSnap.docs.map(doc => {
+      const data = doc.data();
+      const streak = data.streakCount ?? 0;
+      const lastBetDate = data.lastBetDate ? data.lastBetDate.slice(0, 10) : null;
+      if (lastBetDate === todayStr) return null;
+      const body = streak > 0
+        ? `Tu as tenu toute la journée ! ${streak} jour${streak > 1 ? 's' : ''} sans pari. +10 XP gagné 🎉`
+        : "Une nouvelle journée sans pari s'achève. Demain est une nouvelle chance. 💪";
+      return { token: data.fcmToken, notification: { title: "Bravo pour aujourd'hui ! 🌙", body }, webpush: { notification: { icon: "/icon-192.png", badge: "/icon-192.png" }, fcmOptions: { link: "https://stopbet-app-angel.vercel.app" } } };
+    }).filter(Boolean);
     const chunks = [];
     for (let i = 0; i < messages.length; i += 500) chunks.push(messages.slice(i, i + 500));
-    for (const chunk of chunks) {
-      await admin.messaging().sendEach(chunk);
-    }
-
+    for (const chunk of chunks) await admin.messaging().sendEach(chunk);
     console.log(`Evening notifications sent to ${messages.length} users`);
   }
 );
 
-// ── NOTIFICATIONS PUSH — Alerte streak en danger (tous les 2 jours si inactif) ──
 exports.sendStreakAlerts = onSchedule(
   { schedule: "0 12 * * *", timeZone: "Europe/Paris" },
   async () => {
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
-
-    const usersSnap = await admin.firestore()
-      .collection("users")
-      .where("notificationsEnabled", "==", true)
-      .where("fcmToken", "!=", null)
-      .where("streakCount", ">", 0)
-      .get();
-
-    const messages = usersSnap.docs
-      .map(doc => {
-        const data        = doc.data();
-        const lastBetDate = data.lastBetDate;
-        // Envoyer seulement si le dernier pari date de plus de 2 jours (streak actif mais app pas ouverte)
-        if (!lastBetDate || lastBetDate > twoDaysAgo) return null;
-
-        const streak = data.streakCount ?? 0;
-        return {
-          token: data.fcmToken,
-          notification: {
-            title: "⚠️ Ton streak est en danger !",
-            body:  `Tu as ${streak} jours sans pari — ouvre l'app pour confirmer que tu tiens bon !`,
-          },
-          webpush: {
-            notification: { icon: "/icon-192.png", badge: "/icon-192.png", vibrate: [300, 100, 300, 100, 300] },
-            fcmOptions:   { link: "https://stopbet-app-angel.vercel.app" },
-          },
-        };
-      })
-      .filter(Boolean);
-
+    const usersSnap  = await admin.firestore().collection("users").where("notificationsEnabled", "==", true).where("fcmToken", "!=", null).where("streakCount", ">", 0).get();
+    const messages = usersSnap.docs.map(doc => {
+      const data = doc.data();
+      const lastBetDate = data.lastBetDate;
+      if (!lastBetDate || lastBetDate > twoDaysAgo) return null;
+      const streak = data.streakCount ?? 0;
+      return { token: data.fcmToken, notification: { title: "⚠️ Ton streak est en danger !", body: `Tu as ${streak} jours sans pari — ouvre l'app pour confirmer que tu tiens bon !` }, webpush: { notification: { icon: "/icon-192.png", badge: "/icon-192.png", vibrate: [300, 100, 300, 100, 300] }, fcmOptions: { link: "https://stopbet-app-angel.vercel.app" } } };
+    }).filter(Boolean);
     const chunks = [];
     for (let i = 0; i < messages.length; i += 500) chunks.push(messages.slice(i, i + 500));
-    for (const chunk of chunks) {
-      await admin.messaging().sendEach(chunk);
-    }
-
+    for (const chunk of chunks) await admin.messaging().sendEach(chunk);
     console.log(`Streak alerts sent to ${messages.length} users`);
   }
 );
