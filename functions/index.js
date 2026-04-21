@@ -1,4 +1,4 @@
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, HttpsError, onRequest } = require("firebase-functions/v2/https");
 const { onSchedule }         = require("firebase-functions/v2/scheduler");
 const { defineSecret }       = require("firebase-functions/params");
 const admin  = require("firebase-admin");
@@ -6,7 +6,8 @@ const stripe = require("stripe");
 
 admin.initializeApp();
 
-const stripeSecret = defineSecret("STRIPE_SECRET");
+const stripeSecret        = defineSecret("STRIPE_SECRET");
+const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
 
 const PRICES      = { monthly: 349, yearly: 3000 };
 const VALID_PLANS = ['monthly', 'yearly'];
@@ -126,14 +127,12 @@ exports.deleteAccount = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const uid = request.auth.uid;
   try {
-    // Annuler l'abonnement Stripe si actif
     const userDoc  = await admin.firestore().collection("users").doc(uid).get();
     const userData = userDoc.data();
     if (userData?.stripeSubscriptionId && userData?.subscriptionStatus === "active") {
       const stripeClient = stripe(stripeSecret.value());
       await stripeClient.subscriptions.cancel(userData.stripeSubscriptionId).catch(() => {});
     }
-    // Supprimer sous-collections
     const deleteCollection = async (colPath) => {
       const snap = await admin.firestore().collection(colPath).get();
       const batch = admin.firestore().batch();
@@ -143,14 +142,99 @@ exports.deleteAccount = onCall({ secrets: [stripeSecret] }, async (request) => {
     await deleteCollection(`users/${uid}/bets`);
     await deleteCollection(`users/${uid}/goals`);
     await deleteCollection(`users/${uid}/moods`);
-    // Supprimer doc user + leaderboard
     await admin.firestore().collection("users").doc(uid).delete();
     await admin.firestore().collection("leaderboard").doc(uid).delete().catch(() => {});
-    // Supprimer compte Auth
     await admin.auth().deleteUser(uid);
     return { success: true };
   } catch (error) {
     throw new HttpsError("internal", error.message);
+  }
+});
+
+// ── Webhook Stripe ──
+exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret] }, async (req, res) => {
+  if (req.method !== "POST") { res.status(405).send("Method Not Allowed"); return; }
+  const sig     = req.headers["stripe-signature"];
+  const payload = req.rawBody;
+  let event;
+  try {
+    const stripeClient = stripe(stripeSecret.value());
+    event = stripeClient.webhooks.constructEvent(payload, sig, stripeWebhookSecret.value());
+  } catch (err) {
+    console.error("Webhook signature invalide:", err.message);
+    res.status(400).send(`Webhook Error: ${err.message}`);
+    return;
+  }
+
+  try {
+    switch (event.type) {
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object;
+        const userId = subscription.metadata?.userId;
+        if (!userId) {
+          // Chercher par stripeSubscriptionId
+          const snap = await admin.firestore().collection("users")
+            .where("stripeSubscriptionId", "==", subscription.id).limit(1).get();
+          if (!snap.empty) {
+            await snap.docs[0].ref.update({
+              subscriptionType: "free",
+              subscriptionStatus: "canceled",
+              stripeSubscriptionId: null,
+              currentPeriodEnd: null,
+              cancelAt: null,
+            });
+          }
+        } else {
+          await admin.firestore().collection("users").doc(userId).update({
+            subscriptionType: "free",
+            subscriptionStatus: "canceled",
+            stripeSubscriptionId: null,
+            currentPeriodEnd: null,
+            cancelAt: null,
+          });
+        }
+        break;
+      }
+
+      case "customer.subscription.updated": {
+        const subscription = event.data.object;
+        const snap = await admin.firestore().collection("users")
+          .where("stripeSubscriptionId", "==", subscription.id).limit(1).get();
+        if (!snap.empty) {
+          const currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+          const isCanceling = subscription.cancel_at_period_end === true;
+          const cancelAt = subscription.cancel_at
+            ? new Date(subscription.cancel_at * 1000).toISOString()
+            : null;
+          await snap.docs[0].ref.update({
+            currentPeriodEnd,
+            subscriptionStatus: isCanceling ? "canceling" : "active",
+            cancelAt: cancelAt ?? admin.firestore.FieldValue.delete(),
+          });
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object;
+        const subscriptionId = invoice.subscription;
+        if (subscriptionId) {
+          const snap = await admin.firestore().collection("users")
+            .where("stripeSubscriptionId", "==", subscriptionId).limit(1).get();
+          if (!snap.empty) {
+            await snap.docs[0].ref.update({
+              subscriptionStatus: "past_due",
+            });
+          }
+        }
+        break;
+      }
+    }
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error("Webhook handler error:", err);
+    res.status(500).send("Internal error");
   }
 });
 

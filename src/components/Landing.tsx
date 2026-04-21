@@ -73,12 +73,12 @@ export default function Landing({ onStart, onLogin }: { onStart: () => void; onL
 
           <div className="space-y-4">
             {[
-              { icon: Shield,     colorLight: "bg-red-50 text-red-500",       colorDark: "dark:bg-red-500/10 dark:text-red-400",     title: "Mode SOS",              desc: "Un bouton d'urgence quand l'envie est trop forte. Respiration guidée + contacts d'urgence." },
-              { icon: Brain,      colorLight: "bg-indigo-50 text-indigo-600",  colorDark: "dark:bg-indigo-500/10 dark:text-indigo-400", title: "Coach IA personnel",    desc: "Un coach disponible 24/7 qui comprend votre situation et vous guide." },
-              { icon: TrendingUp, colorLight: "bg-emerald-50 text-emerald-600",colorDark: "dark:bg-emerald-500/10 dark:text-emerald-400",title: "Suivi des progrès",   desc: "Visualisez vos jours sans paris, votre argent économisé et votre niveau." },
-              { icon: Trophy,     colorLight: "bg-amber-50 text-amber-500",    colorDark: "dark:bg-amber-500/10 dark:text-amber-400",  title: "Classement mondial",    desc: "Mesurez-vous à la communauté. Gagnez des XP et montez de niveau." },
-              { icon: Wallet,     colorLight: "bg-violet-50 text-violet-600",  colorDark: "dark:bg-violet-500/10 dark:text-violet-400", title: "Journal de tentations", desc: "Notez chaque envie de parier. Comprenez vos déclencheurs." },
-              { icon: Clock,      colorLight: "bg-cyan-50 text-cyan-600",      colorDark: "dark:bg-cyan-500/10 dark:text-cyan-400",    title: "Streak & récompenses",  desc: "Chaque jour sans pari compte. Maintenez votre série et gagnez des badges." },
+              { icon: Shield,     colorLight: "bg-red-50 text-red-500",        colorDark: "dark:bg-red-500/10 dark:text-red-400",      title: "Mode SOS",              desc: "Un bouton d'urgence quand l'envie est trop forte. Respiration guidée + contacts d'urgence." },
+              { icon: Brain,      colorLight: "bg-indigo-50 text-indigo-600",   colorDark: "dark:bg-indigo-500/10 dark:text-indigo-400", title: "Coach IA personnel",    desc: "Un coach disponible 24/7 qui comprend votre situation et vous guide." },
+              { icon: TrendingUp, colorLight: "bg-emerald-50 text-emerald-600", colorDark: "dark:bg-emerald-500/10 dark:text-emerald-400", title: "Suivi des progrès",  desc: "Visualisez vos jours sans paris, votre argent économisé et votre niveau." },
+              { icon: Trophy,     colorLight: "bg-amber-50 text-amber-500",     colorDark: "dark:bg-amber-500/10 dark:text-amber-400",  title: "Classement mondial",    desc: "Mesurez-vous à la communauté. Gagnez des XP et montez de niveau." },
+              { icon: Wallet,     colorLight: "bg-violet-50 text-violet-600",   colorDark: "dark:bg-violet-500/10 dark:text-violet-400", title: "Journal de tentations", desc: "Notez chaque envie de parier. Comprenez vos déclencheurs." },
+              { icon: Clock,      colorLight: "bg-cyan-50 text-cyan-600",       colorDark: "dark:bg-cyan-500/10 dark:text-cyan-400",    title: "Streak & récompenses",  desc: "Chaque jour sans pari compte. Maintenez votre série et gagnez des badges." },
             ].map(({ icon: Icon, colorLight, colorDark, title, desc }) => (
               <div key={title} className="flex gap-4 p-4 bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/50 rounded-2xl shadow-sm">
                 <div className={`p-3 rounded-xl shrink-0 ${colorLight} ${colorDark}`}>
@@ -160,6 +160,9 @@ export default function Landing({ onStart, onLogin }: { onStart: () => void; onL
           <p className="text-xs text-slate-400 mb-4">Reprenez le contrôle de votre vie</p>
           <p className="text-xs text-slate-300 dark:text-slate-700">© 2026 StopBet · Tous droits réservés</p>
           <p className="text-xs text-slate-300 dark:text-slate-700 mt-1">SIREN 103438552</p>
+          <button onClick={onStart} className="text-xs text-indigo-400 hover:underline mt-2 block mx-auto">
+            Politique de confidentialité & CGU
+          </button>
         </div>
       </footer>
     </div>
