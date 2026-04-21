@@ -7,6 +7,30 @@
 }
 
 body {
-  @apply bg-slate-50;
   overscroll-behavior: none;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+:root,
+.light {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --border: #e2e8f0;
+}
+
+.dark {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --border: #334155;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
