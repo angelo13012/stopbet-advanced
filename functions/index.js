@@ -8,12 +8,105 @@ admin.initializeApp();
 
 const stripeSecret        = defineSecret("STRIPE_SECRET");
 const stripeWebhookSecret = defineSecret("STRIPE_WEBHOOK_SECRET");
+const resendApiKey        = defineSecret("RESEND_API_KEY");
 
 const PRICES      = { monthly: 349, yearly: 3000 };
 const VALID_PLANS = ['monthly', 'yearly'];
 
+// ── Rate limiting ──
+async function checkRateLimit(uid, action, maxCalls = 5) {
+  const now    = Date.now();
+  const window = 60 * 60 * 1000;
+  const ref    = admin.firestore().collection("rateLimits").doc(`${uid}_${action}`);
+  const doc    = await ref.get();
+  const data   = doc.exists ? doc.data() : null;
+  if (data && now - data.windowStart < window) {
+    if (data.count >= maxCalls) throw new HttpsError("resource-exhausted", "Trop de tentatives. Réessaie dans une heure.");
+    await ref.update({ count: admin.firestore.FieldValue.increment(1) });
+  } else {
+    await ref.set({ windowStart: now, count: 1 });
+  }
+}
+
+// ── Envoi email via Resend ──
+async function sendEmail(apiKey, { to, subject, html }) {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: "StopBet <contact@stopbet.fr>", to, subject, html }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("Resend error:", err);
+  }
+}
+
+// ── Template email bienvenue ──
+function welcomeEmailHtml(firstName) {
+  return `
+    <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background: #f8fafc;">
+      <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <h1 style="color: #4f46e5; font-size: 24px; margin-bottom: 8px;">Bienvenue sur StopBet 🎉</h1>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">Bonjour ${firstName},</p>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+          Ton compte StopBet est créé. Tu viens de faire le premier pas — et c'est souvent le plus difficile.
+        </p>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+          Voici ce que tu peux faire dès maintenant :
+        </p>
+        <ul style="color: #64748b; font-size: 15px; line-height: 2;">
+          <li>🔥 Commencer ton streak de jours sans pari</li>
+          <li>🆘 Configurer le mode SOS en cas d'envie forte</li>
+          <li>🎯 Créer un objectif d'épargne</li>
+          <li>📊 Suivre ta progression chaque jour</li>
+        </ul>
+        <a href="https://www.stopbet.fr" style="display: inline-block; margin-top: 16px; background: #4f46e5; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: bold;">
+          Ouvrir StopBet →
+        </a>
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 32px;">
+          En cas de besoin, le Joueurs Info Service est disponible 7j/7 au <strong>09 74 75 13 13</strong> (gratuit).
+        </p>
+        <p style="color: #cbd5e1; font-size: 11px; margin-top: 16px;">
+          StopBet · SIREN 103438552 · contact@stopbet.fr
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+// ── Template email résiliation ──
+function cancellationEmailHtml(firstName, cancelAt) {
+  const date = new Date(cancelAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  return `
+    <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background: #f8fafc;">
+      <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <h1 style="color: #0f172a; font-size: 24px; margin-bottom: 8px;">Résiliation confirmée</h1>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">Bonjour ${firstName},</p>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+          Ta demande de résiliation a bien été prise en compte. Tu gardes accès à toutes les fonctionnalités Premium jusqu'au <strong style="color: #0f172a;">${date}</strong>.
+        </p>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+          Après cette date, ton compte repassera automatiquement en version gratuite. Aucun prélèvement ne sera effectué.
+        </p>
+        <div style="background: #f1f5f9; border-radius: 12px; padding: 16px; margin: 24px 0;">
+          <p style="color: #475569; font-size: 13px; margin: 0;">
+            💡 Tu peux réactiver ton abonnement à tout moment depuis les paramètres de ton compte.
+          </p>
+        </div>
+        <a href="https://www.stopbet.fr" style="display: inline-block; background: #4f46e5; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: bold;">
+          Accéder à mon compte →
+        </a>
+        <p style="color: #cbd5e1; font-size: 11px; margin-top: 32px;">
+          StopBet · SIREN 103438552 · contact@stopbet.fr
+        </p>
+      </div>
+    </div>
+  `;
+}
+
 exports.createCheckoutSession = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  await checkRateLimit(request.auth.uid, "checkout", 5);
   const { plan, successUrl, cancelUrl } = request.data;
   if (!VALID_PLANS.includes(plan)) throw new HttpsError("invalid-argument", "Plan invalide");
   if (!successUrl || !cancelUrl)   throw new HttpsError("invalid-argument", "URLs manquantes");
@@ -34,6 +127,7 @@ exports.createCheckoutSession = onCall({ secrets: [stripeSecret] }, async (reque
 
 exports.createTrialSession = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  await checkRateLimit(request.auth.uid, "trial", 3);
   const { plan, successUrl, cancelUrl } = request.data;
   if (!VALID_PLANS.includes(plan)) throw new HttpsError("invalid-argument", "Plan invalide");
   if (!successUrl || !cancelUrl)   throw new HttpsError("invalid-argument", "URLs manquantes");
@@ -56,7 +150,7 @@ exports.createTrialSession = onCall({ secrets: [stripeSecret] }, async (request)
   } catch (error) { throw new HttpsError("internal", error.message); }
 });
 
-exports.confirmCheckout = onCall({ secrets: [stripeSecret] }, async (request) => {
+exports.confirmCheckout = onCall({ secrets: [stripeSecret, resendApiKey] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const { sessionId, plan, trial } = request.data;
   if (!sessionId || !VALID_PLANS.includes(plan)) throw new HttpsError("invalid-argument", "Données invalides");
@@ -101,8 +195,9 @@ exports.confirmCheckout = onCall({ secrets: [stripeSecret] }, async (request) =>
   }
 });
 
-exports.cancelSubscription = onCall({ secrets: [stripeSecret] }, async (request) => {
+exports.cancelSubscription = onCall({ secrets: [stripeSecret, resendApiKey] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  await checkRateLimit(request.auth.uid, "cancel", 3);
   const userDoc  = await admin.firestore().collection("users").doc(request.auth.uid).get();
   const userData = userDoc.data();
   if (!userData?.stripeSubscriptionId) throw new HttpsError("not-found", "Aucun abonnement actif trouvé");
@@ -117,6 +212,15 @@ exports.cancelSubscription = onCall({ secrets: [stripeSecret] }, async (request)
       subscriptionStatus: "canceling",
       cancelAt,
     });
+    // Email de confirmation résiliation
+    const userEmail = await admin.auth().getUser(request.auth.uid).then(u => u.email);
+    if (userEmail) {
+      await sendEmail(resendApiKey.value(), {
+        to: userEmail,
+        subject: "Résiliation confirmée — StopBet",
+        html: cancellationEmailHtml(userData.firstName ?? "là", cancelAt),
+      });
+    }
     return { success: true, cancelAt };
   } catch (error) {
     throw new HttpsError("internal", error.message);
@@ -125,6 +229,7 @@ exports.cancelSubscription = onCall({ secrets: [stripeSecret] }, async (request)
 
 exports.deleteAccount = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  await checkRateLimit(request.auth.uid, "delete", 2);
   const uid = request.auth.uid;
   try {
     const userDoc  = await admin.firestore().collection("users").doc(uid).get();
@@ -151,7 +256,6 @@ exports.deleteAccount = onCall({ secrets: [stripeSecret] }, async (request) => {
   }
 });
 
-// ── Webhook Stripe ──
 exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret] }, async (req, res) => {
   if (req.method !== "POST") { res.status(405).send("Method Not Allowed"); return; }
   const sig     = req.headers["stripe-signature"];
@@ -165,28 +269,14 @@ exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret]
     res.status(400).send(`Webhook Error: ${err.message}`);
     return;
   }
-
   try {
     switch (event.type) {
-
       case "customer.subscription.deleted": {
         const subscription = event.data.object;
-        const userId = subscription.metadata?.userId;
-        if (!userId) {
-          // Chercher par stripeSubscriptionId
-          const snap = await admin.firestore().collection("users")
-            .where("stripeSubscriptionId", "==", subscription.id).limit(1).get();
-          if (!snap.empty) {
-            await snap.docs[0].ref.update({
-              subscriptionType: "free",
-              subscriptionStatus: "canceled",
-              stripeSubscriptionId: null,
-              currentPeriodEnd: null,
-              cancelAt: null,
-            });
-          }
-        } else {
-          await admin.firestore().collection("users").doc(userId).update({
+        const snap = await admin.firestore().collection("users")
+          .where("stripeSubscriptionId", "==", subscription.id).limit(1).get();
+        if (!snap.empty) {
+          await snap.docs[0].ref.update({
             subscriptionType: "free",
             subscriptionStatus: "canceled",
             stripeSubscriptionId: null,
@@ -196,7 +286,6 @@ exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret]
         }
         break;
       }
-
       case "customer.subscription.updated": {
         const subscription = event.data.object;
         const snap = await admin.firestore().collection("users")
@@ -215,7 +304,6 @@ exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret]
         }
         break;
       }
-
       case "invoice.payment_failed": {
         const invoice = event.data.object;
         const subscriptionId = invoice.subscription;
@@ -223,9 +311,7 @@ exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret]
           const snap = await admin.firestore().collection("users")
             .where("stripeSubscriptionId", "==", subscriptionId).limit(1).get();
           if (!snap.empty) {
-            await snap.docs[0].ref.update({
-              subscriptionStatus: "past_due",
-            });
+            await snap.docs[0].ref.update({ subscriptionStatus: "past_due" });
           }
         }
         break;
@@ -250,6 +336,7 @@ exports.generateReferralCode = onCall({ secrets: [stripeSecret] }, async (reques
 
 exports.applyReferralCode = onCall({ secrets: [stripeSecret] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  await checkRateLimit(request.auth.uid, "referral", 5);
   const { code } = request.data;
   if (!code) throw new HttpsError("invalid-argument", "Code manquant");
   const userDoc  = await admin.firestore().collection("users").doc(request.auth.uid).get();
@@ -268,6 +355,20 @@ exports.applyReferralCode = onCall({ secrets: [stripeSecret] }, async (request) 
   batch.update(admin.firestore().collection("users").doc(request.auth.uid), { referralApplied: true, referredBy: referrerId, referralBonusEnds: bonusEndsAt, subscriptionType: "premium", subscriptionStatus: "active", isTrial: true, trialEndsAt: bonusEndsAt });
   await batch.commit();
   return { success: true, bonusEndsAt, referrerCount: newCount };
+});
+
+// ── Email de bienvenue à l'inscription ──
+exports.sendWelcomeEmail = onCall({ secrets: [resendApiKey] }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
+  const { firstName } = request.data;
+  const userEmail = await admin.auth().getUser(request.auth.uid).then(u => u.email);
+  if (!userEmail) return { success: false };
+  await sendEmail(resendApiKey.value(), {
+    to: userEmail,
+    subject: "Bienvenue sur StopBet 🎉",
+    html: welcomeEmailHtml(firstName ?? ""),
+  });
+  return { success: true };
 });
 
 exports.sendMorningNotifications = onSchedule(

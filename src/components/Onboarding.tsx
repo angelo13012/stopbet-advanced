@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from '../services/firebase';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { db, auth, app } from '../services/firebase';
 import { UserProfile, OperationType, FirestoreErrorInfo } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Calendar, Wallet, ChevronRight, Check, AtSign, Shield, Zap, Heart } from 'lucide-react';
+import { User, Calendar, Wallet, ChevronRight, Check, AtSign } from 'lucide-react';
 
-// ── Slides de présentation ──
 const INTRO_SLIDES = [
   {
     emoji: '🛑',
@@ -153,6 +153,15 @@ export default function Onboarding() {
       } catch (e) {
         handleFirestoreError(e, OperationType.WRITE, path);
       }
+
+      // Email de bienvenue
+      try {
+        const fns = getFunctions(app, 'us-central1');
+        await httpsCallable(fns, 'sendWelcomeEmail')({ firstName: profile.firstName });
+      } catch (e) {
+        console.error('Welcome email error:', e);
+      }
+
     } catch (e: any) {
       setError(e.message ?? "Une erreur est survenue lors de l'enregistrement.");
     } finally {
@@ -160,7 +169,6 @@ export default function Onboarding() {
     }
   };
 
-  // ── Phase intro — slides de présentation ──
   if (phase === 'intro') {
     const s = INTRO_SLIDES[slide];
     return (
@@ -171,7 +179,6 @@ export default function Onboarding() {
             transition={{ duration: 0.3 }}
             className={`flex-1 bg-gradient-to-br ${s.bg} flex flex-col justify-between p-8 min-h-screen`}
           >
-            {/* Indicateurs de slides */}
             <div className="flex items-center justify-between pt-4">
               <div className="flex gap-2">
                 {INTRO_SLIDES.map((_, i) => (
@@ -183,7 +190,6 @@ export default function Onboarding() {
               </button>
             </div>
 
-            {/* Contenu */}
             <div className="flex-1 flex flex-col justify-center py-12">
               <motion.div
                 initial={{ scale: 0.5, opacity: 0 }}
@@ -227,7 +233,6 @@ export default function Onboarding() {
               </motion.div>
             </div>
 
-            {/* Bouton suivant */}
             <motion.button
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -250,7 +255,6 @@ export default function Onboarding() {
     );
   }
 
-  // ── Phase formulaire ──
   const totalSteps = 4;
 
   return (
@@ -264,7 +268,6 @@ export default function Onboarding() {
       <div className="flex-1">
         {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm font-medium mb-6">{error}</div>}
 
-        {/* ── Étape 1 — Identité + Pseudo ── */}
         {step === 1 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Faisons connaissance</h2>
@@ -308,7 +311,6 @@ export default function Onboarding() {
           </motion.div>
         )}
 
-        {/* ── Étape 2 — Finances ── */}
         {step === 2 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Vos finances</h2>
@@ -322,7 +324,6 @@ export default function Onboarding() {
           </motion.div>
         )}
 
-        {/* ── Étape 3 — Historique ── */}
         {step === 3 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Votre historique</h2>
@@ -343,7 +344,6 @@ export default function Onboarding() {
           </motion.div>
         )}
 
-        {/* ── Étape 4 — Trial ── */}
         {step === 4 && (
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Dernière étape 🎁</h2>
@@ -381,7 +381,6 @@ export default function Onboarding() {
         )}
       </div>
 
-      {/* Navigation */}
       <div className="flex gap-4 mt-8">
         {step > 1 && (
           <button onClick={() => setStep(s => s - 1)}
