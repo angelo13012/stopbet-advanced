@@ -21,6 +21,7 @@ import SOSMode from './components/SOSMode';
 import CGU from './components/CGU';
 import Landing from './components/Landing';
 import Support from './components/Support';
+import Admin from './components/Admin';
 import { ThemeToggle } from './components/ThemeToggle';
 import { syncStreakAndXP } from './services/streak';
 import {
@@ -56,6 +57,7 @@ export default function App() {
   const [showPlatformsModal, setShowPlatformsModal] = useState(false);
   const [showCGU,            setShowCGU]            = useState(false);
   const [showDeleteModal,    setShowDeleteModal]    = useState(false);
+  const [showAdmin,          setShowAdmin]          = useState(false);
   const [notifLoading,       setNotifLoading]       = useState(false);
   const [foregroundNotif,    setForegroundNotif]    = useState<{ title: string; body: string } | null>(null);
   const [showLanding,        setShowLanding]        = useState(true);
@@ -267,6 +269,13 @@ export default function App() {
               <ChevronRight size={20} className="text-slate-400" />
             </button>
 
+            {profile.role === 'admin' && (
+              <button onClick={() => setShowAdmin(true)}
+                className="w-full flex items-center gap-3 p-4 bg-indigo-600 text-white rounded-2xl font-semibold">
+                <Shield size={20} /> Dashboard Admin
+              </button>
+            )}
+
             <button onClick={() => auth.signOut()}
               className="w-full flex items-center gap-3 p-4 bg-red-50 text-red-600 rounded-2xl font-semibold">
               <LogOut size={20} /> Déconnexion
@@ -366,6 +375,14 @@ export default function App() {
         <AnimatePresence>
           {showDeleteModal && user && (
             <DeleteAccountModal onClose={() => setShowDeleteModal(false)} />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showAdmin && (
+            <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}>
+              <Admin onClose={() => setShowAdmin(false)} />
+            </motion.div>
           )}
         </AnimatePresence>
 
