@@ -113,58 +113,88 @@ export default function Onboarding() {
     setStep(s => s + 1);
   };
 
-  const handleSubmit = async () => {
+  // Crée le profil Firestore
+  const createProfile = async () => {
+    if (!auth.currentUser) return null;
+    const pseudo = formData.pseudo.trim().toLowerCase();
+    const pseudoValid = await validatePseudo(pseudo);
+    if (!pseudoValid) return null;
+
+    const profile: Omit<UserProfile, 'id'> = {
+      firstName:          formData.firstName.trim(),
+      lastName:           formData.lastName.trim(),
+      pseudo,
+      dob:                formData.dob,
+      monthlyIncome:      parseFloat(formData.monthlyIncome),
+      bettingDuration:    formData.bettingDuration,
+      streakCount:        0,
+      bestStreak:         0,
+      xp:                 0,
+      level:              1,
+      badges:             [],
+      subscriptionType:   'free',
+      subscriptionStatus: 'active',
+      role:               'user',
+      createdAt:          new Date().toISOString(),
+    };
+
+    if (!profile.firstName || !profile.lastName || !profile.dob || isNaN(profile.monthlyIncome)) {
+      throw new Error('Veuillez remplir tous les champs obligatoires.');
+    }
+
+    const uid  = auth.currentUser.uid;
+    const path = `users/${uid}`;
+    try {
+      await setDoc(doc(db, 'users', uid), profile);
+      await setDoc(doc(db, 'leaderboard', uid), {
+        pseudo, xp: 0, streakCount: 0, level: 1, updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, path);
+    }
+
+    // Email de bienvenue
+    try {
+      const fns = getFunctions(app, 'us-central1');
+      await httpsCallable(fns, 'sendWelcomeEmail')({ firstName: profile.firstName });
+    } catch (e) {
+      console.error('Welcome email error:', e);
+    }
+
+    return profile;
+  };
+
+  // Bouton "Commencer en version gratuite"
+  const handleSubmitFree = async () => {
     if (!auth.currentUser) return;
     setLoading(true); setError(null);
     try {
-      const pseudo = formData.pseudo.trim().toLowerCase();
-      const pseudoValid = await validatePseudo(pseudo);
-      if (!pseudoValid) { setLoading(false); return; }
-
-      const profile: Omit<UserProfile, 'id'> = {
-        firstName:          formData.firstName.trim(),
-        lastName:           formData.lastName.trim(),
-        pseudo,
-        dob:                formData.dob,
-        monthlyIncome:      parseFloat(formData.monthlyIncome),
-        bettingDuration:    formData.bettingDuration,
-        streakCount:        0,
-        bestStreak:         0,
-        xp:                 0,
-        level:              1,
-        badges:             [],
-        subscriptionType:   'free',
-        subscriptionStatus: 'active',
-        role:               'user',
-        createdAt:          new Date().toISOString(),
-      };
-
-      if (!profile.firstName || !profile.lastName || !profile.dob || isNaN(profile.monthlyIncome)) {
-        throw new Error('Veuillez remplir tous les champs obligatoires.');
-      }
-
-      const uid  = auth.currentUser.uid;
-      const path = `users/${uid}`;
-      try {
-        await setDoc(doc(db, 'users', uid), profile);
-        await setDoc(doc(db, 'leaderboard', uid), {
-          pseudo, xp: 0, streakCount: 0, level: 1, updatedAt: new Date().toISOString(),
-        });
-      } catch (e) {
-        handleFirestoreError(e, OperationType.WRITE, path);
-      }
-
-      // Email de bienvenue
-      try {
-        const fns = getFunctions(app, 'us-central1');
-        await httpsCallable(fns, 'sendWelcomeEmail')({ firstName: profile.firstName });
-      } catch (e) {
-        console.error('Welcome email error:', e);
-      }
-
+      await createProfile();
     } catch (e: any) {
       setError(e.message ?? "Une erreur est survenue lors de l'enregistrement.");
     } finally {
+      setLoading(false);
+    }
+  };
+
+  // Bouton "Démarrer l'essai gratuit"
+  const handleSubmitTrial = async () => {
+    if (!auth.currentUser) return;
+    setLoading(true); setError(null);
+    try {
+      const profile = await createProfile();
+      if (!profile) { setLoading(false); return; }
+
+      // Lance Stripe trial
+      const fns    = getFunctions(app, 'us-central1');
+      const result = await httpsCallable(fns, 'createTrialSession')({
+        plan:       'monthly',
+        successUrl: window.location.origin + '/?session_id={CHECKOUT_SESSION_ID}&plan=monthly&trial=true',
+        cancelUrl:  window.location.origin + '/',
+      });
+      window.location.href = (result.data as any).url;
+    } catch (e: any) {
+      setError(e.message ?? "Une erreur est survenue.");
       setLoading(false);
     }
   };
@@ -402,11 +432,11 @@ export default function Onboarding() {
 
         {step === 4 && (
           <div className="flex-[2] flex flex-col gap-3">
-            <button onClick={handleSubmit} disabled={loading}
+            <button onClick={handleSubmitTrial} disabled={loading}
               className="w-full py-4 bg-amber-500 text-white rounded-2xl font-black hover:bg-amber-600 transition-all shadow-lg disabled:opacity-50">
-              {loading ? 'Création…' : "Commencer l'essai gratuit 🎁"}
+              {loading ? 'Chargement…' : "Démarrer l'essai gratuit 🎁"}
             </button>
-            <button onClick={handleSubmit} disabled={loading}
+            <button onClick={handleSubmitFree} disabled={loading}
               className="w-full py-3 text-slate-400 font-bold text-sm hover:text-slate-600 transition-all disabled:opacity-50">
               {loading ? '…' : 'Commencer en version gratuite'}
             </button>
