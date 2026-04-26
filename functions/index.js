@@ -51,9 +51,6 @@ function welcomeEmailHtml(firstName) {
         <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
           Ton compte StopBet est créé. Tu viens de faire le premier pas — et c'est souvent le plus difficile.
         </p>
-        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
-          Voici ce que tu peux faire dès maintenant :
-        </p>
         <ul style="color: #64748b; font-size: 15px; line-height: 2;">
           <li>🔥 Commencer ton streak de jours sans pari</li>
           <li>🆘 Configurer le mode SOS en cas d'envie forte</li>
@@ -66,9 +63,7 @@ function welcomeEmailHtml(firstName) {
         <p style="color: #94a3b8; font-size: 12px; margin-top: 32px;">
           En cas de besoin, le Joueurs Info Service est disponible 7j/7 au <strong>09 74 75 13 13</strong> (gratuit).
         </p>
-        <p style="color: #cbd5e1; font-size: 11px; margin-top: 16px;">
-          StopBet · SIREN 103438552 · contact@stopbet.fr
-        </p>
+        <p style="color: #cbd5e1; font-size: 11px; margin-top: 16px;">StopBet · SIREN 103438552 · contact@stopbet.fr</p>
       </div>
     </div>
   `;
@@ -96,9 +91,81 @@ function cancellationEmailHtml(firstName, cancelAt) {
         <a href="https://www.stopbet.fr" style="display: inline-block; background: #4f46e5; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: bold;">
           Accéder à mon compte →
         </a>
-        <p style="color: #cbd5e1; font-size: 11px; margin-top: 32px;">
-          StopBet · SIREN 103438552 · contact@stopbet.fr
+        <p style="color: #cbd5e1; font-size: 11px; margin-top: 32px;">StopBet · SIREN 103438552 · contact@stopbet.fr</p>
+      </div>
+    </div>
+  `;
+}
+
+// ── Template email Premium ──
+function premiumEmailHtml(firstName, isTrial, planLabel, nextBillingDate, trialEndsAt) {
+  const trialEnd = trialEndsAt
+    ? new Date(trialEndsAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+  return `
+    <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background: #f8fafc;">
+      <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <h1 style="color: #4f46e5; font-size: 24px; margin-bottom: 8px;">
+          ${isTrial ? "Ton essai Premium a démarré ! 🎁" : "Bienvenue en Premium ! 🎉"}
+        </h1>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">Bonjour ${firstName},</p>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+          ${isTrial
+            ? `Ton essai gratuit de 7 jours est activé. Tu as accès à toutes les fonctionnalités Premium jusqu'au <strong style="color: #0f172a;">${trialEnd}</strong>.`
+            : `Ton abonnement <strong style="color: #0f172a;">${planLabel}</strong> est actif. Tu as accès à toutes les fonctionnalités Premium.`
+          }
         </p>
+        <div style="background: #f1f5f9; border-radius: 12px; padding: 20px; margin: 24px 0;">
+          <p style="color: #475569; font-size: 14px; font-weight: bold; margin: 0 0 12px 0;">Ce que tu débloques :</p>
+          ${['🧠 Coach IA Claude personnalisé', '📊 Graphiques & stats avancées', '💰 Argent économisé calculé', '🔔 Alertes budget personnalisées', '🛡️ Auto-exclusion des plateformes', '📅 Citations motivantes quotidiennes'].map(f => `
+            <p style="color: #64748b; font-size: 13px; margin: 6px 0;">✓ ${f}</p>
+          `).join('')}
+        </div>
+        ${isTrial && trialEnd ? `
+          <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+            <p style="color: #c2410c; font-size: 13px; margin: 0;">
+              ⚠️ Sans annulation avant le <strong>${trialEnd}</strong>, ton abonnement ${planLabel} démarrera automatiquement.
+            </p>
+          </div>
+        ` : ''}
+        ${nextBillingDate && !isTrial ? `
+          <p style="color: #64748b; font-size: 13px;">Prochain prélèvement : <strong>${nextBillingDate}</strong></p>
+        ` : ''}
+        <a href="https://www.stopbet.fr" style="display: inline-block; margin-top: 16px; background: #4f46e5; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: bold;">
+          Accéder à StopBet →
+        </a>
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 32px;">Tu peux annuler à tout moment depuis les paramètres de ton compte.</p>
+        <p style="color: #cbd5e1; font-size: 11px; margin-top: 8px;">StopBet · SIREN 103438552 · contact@stopbet.fr</p>
+      </div>
+    </div>
+  `;
+}
+
+// ── Template email impayé ──
+function paymentFailedEmailHtml(firstName) {
+  return `
+    <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 32px; background: #f8fafc;">
+      <div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);">
+        <h1 style="color: #dc2626; font-size: 24px; margin-bottom: 8px;">⚠️ Paiement échoué</h1>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">Bonjour ${firstName},</p>
+        <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
+          Nous n'avons pas pu traiter le paiement de ton abonnement StopBet Premium. Ton accès Premium pourrait être suspendu si le problème n'est pas résolu.
+        </p>
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 16px; margin: 24px 0;">
+          <p style="color: #dc2626; font-size: 13px; margin: 0 0 8px 0; font-weight: bold;">Que faire ?</p>
+          <p style="color: #b91c1c; font-size: 13px; margin: 0;">
+            1. Vérifie que ta carte bancaire est valide et non expirée<br/>
+            2. Assure-toi que tu as suffisamment de fonds<br/>
+            3. Stripe va réessayer automatiquement dans les prochains jours
+          </p>
+        </div>
+        <a href="https://www.stopbet.fr" style="display: inline-block; background: #4f46e5; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: bold;">
+          Mettre à jour mon moyen de paiement →
+        </a>
+        <p style="color: #94a3b8; font-size: 12px; margin-top: 32px;">
+          Si tu as des questions, contacte-nous à contact@stopbet.fr
+        </p>
+        <p style="color: #cbd5e1; font-size: 11px; margin-top: 8px;">StopBet · SIREN 103438552 · contact@stopbet.fr</p>
       </div>
     </div>
   `;
@@ -188,6 +255,27 @@ exports.confirmCheckout = onCall({ secrets: [stripeSecret, resendApiKey] }, asyn
       updateData.isTrial     = true;
     }
     await admin.firestore().collection("users").doc(request.auth.uid).update(updateData);
+
+    // Email confirmation Premium
+    try {
+      const userRecord = await admin.auth().getUser(request.auth.uid);
+      const userDoc    = await admin.firestore().collection("users").doc(request.auth.uid).get();
+      const userData   = userDoc.data();
+      if (userRecord.email) {
+        const planLabel = plan === 'yearly' ? 'Annuel — 30€/an' : 'Mensuel — 3,49€/mois';
+        const nextDate  = currentPeriodEnd
+          ? new Date(currentPeriodEnd).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+          : null;
+        await sendEmail(resendApiKey.value(), {
+          to: userRecord.email,
+          subject: isTrial ? "Ton essai Premium a démarré 🎁 — StopBet" : "Bienvenue en Premium 🎉 — StopBet",
+          html: premiumEmailHtml(userData?.firstName ?? "", isTrial, planLabel, nextDate, trialEndsAt),
+        });
+      }
+    } catch (e) {
+      console.error("Premium email error:", e);
+    }
+
     return { success: true, isTrial, trialEndsAt };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
@@ -212,13 +300,12 @@ exports.cancelSubscription = onCall({ secrets: [stripeSecret, resendApiKey] }, a
       subscriptionStatus: "canceling",
       cancelAt,
     });
-    // Email de confirmation résiliation
     const userEmail = await admin.auth().getUser(request.auth.uid).then(u => u.email);
     if (userEmail) {
       await sendEmail(resendApiKey.value(), {
         to: userEmail,
         subject: "Résiliation confirmée — StopBet",
-        html: cancellationEmailHtml(userData.firstName ?? "là", cancelAt),
+        html: cancellationEmailHtml(userData.firstName ?? "", cancelAt),
       });
     }
     return { success: true, cancelAt };
@@ -256,7 +343,7 @@ exports.deleteAccount = onCall({ secrets: [stripeSecret] }, async (request) => {
   }
 });
 
-exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret] }, async (req, res) => {
+exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret, resendApiKey] }, async (req, res) => {
   if (req.method !== "POST") { res.status(405).send("Method Not Allowed"); return; }
   const sig     = req.headers["stripe-signature"];
   const payload = req.rawBody;
@@ -312,6 +399,20 @@ exports.stripeWebhook = onRequest({ secrets: [stripeSecret, stripeWebhookSecret]
             .where("stripeSubscriptionId", "==", subscriptionId).limit(1).get();
           if (!snap.empty) {
             await snap.docs[0].ref.update({ subscriptionStatus: "past_due" });
+            // Email impayé
+            try {
+              const userData  = snap.docs[0].data();
+              const userRecord = await admin.auth().getUser(snap.docs[0].id);
+              if (userRecord.email) {
+                await sendEmail(resendApiKey.value(), {
+                  to: userRecord.email,
+                  subject: "⚠️ Paiement échoué — StopBet",
+                  html: paymentFailedEmailHtml(userData.firstName ?? ""),
+                });
+              }
+            } catch (e) {
+              console.error("Payment failed email error:", e);
+            }
           }
         }
         break;
@@ -357,7 +458,6 @@ exports.applyReferralCode = onCall({ secrets: [stripeSecret] }, async (request) 
   return { success: true, bonusEndsAt, referrerCount: newCount };
 });
 
-// ── Email de bienvenue à l'inscription ──
 exports.sendWelcomeEmail = onCall({ secrets: [resendApiKey] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Non authentifie");
   const { firstName } = request.data;
