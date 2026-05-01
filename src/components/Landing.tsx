@@ -4,7 +4,7 @@ import {
   Shield, TrendingUp, Brain, Trophy,
   AlertTriangle, Clock, Wallet,
   CheckCircle, ArrowRight, X, FileText,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Quote,
 } from 'lucide-react';
 
 type Section = { title: string; content: string; };
@@ -154,6 +154,47 @@ export default function Landing({ onStart, onLogin }: { onStart: () => void; onL
               <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">{label}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ── HISTOIRE FONDATEUR ── */}
+      <section className="px-6 pb-16">
+        <div className="max-w-md mx-auto">
+          <div className="bg-slate-900 rounded-3xl p-7 relative overflow-hidden">
+            <div className="absolute -right-6 -top-6 text-[100px] opacity-5">💬</div>
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0">
+                A
+              </div>
+              <div>
+                <p className="font-black text-white">Angelo, 24 ans</p>
+                <p className="text-xs text-indigo-400 font-bold">Fondateur de StopBet</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mb-4">
+              <Quote size={16} className="text-indigo-400 shrink-0 mt-1" />
+              <div className="space-y-3">
+                <p className="text-slate-300 text-sm font-medium leading-relaxed">
+                  J'ai 24 ans. Ça fait 6 ans que je paris.
+                </p>
+                <p className="text-slate-300 text-sm font-medium leading-relaxed">
+                  Au début c'était fun — un match de foot le soir, quelques euros misés, l'adrénaline du résultat. Puis les gains sont arrivés. Des grosses sommes. Et là j'ai cru que j'avais trouvé quelque chose.
+                </p>
+                <p className="text-slate-300 text-sm font-medium leading-relaxed">
+                  Mais personne ne te dit ce qui se passe après. Que ta tête va rejouer chaque pari perdu en boucle. Que tu vas miser le double pour te refaire. Que tu vas commencer à regarder du tennis à 2h du matin juste pour avoir quelque chose sur quoi parier.
+                </p>
+                <p className="text-slate-300 text-sm font-medium leading-relaxed">
+                  J'ai perdu des sommes que j'aurais honte de dire. Pas en une fois — petit à petit, mois après mois. Et à chaque fois je me disais que c'était le dernier.
+                </p>
+                <p className="text-slate-300 text-sm font-medium leading-relaxed">
+                  Le pire c'est que je ne pouvais plus regarder du sport normalement. Un match sans pari ne voulait plus rien dire. J'avais perdu le plaisir pur du sport. Remplacé par du stress, des calculs, et cette dopamine qui dure 3 secondes avant de laisser place au vide.
+                </p>
+                <p className="text-white text-sm font-bold leading-relaxed">
+                  J'ai créé StopBet d'abord pour moi. Puis j'ai réalisé qu'on était des milliers dans cette situation. Accros sans vraiment le savoir. Incapables d'en parler. Sans outil pour s'en sortir. Cette app c'est ce que j'aurais voulu avoir à 18 ans.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
