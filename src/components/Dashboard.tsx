@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingDown, Flame, Target, Sparkles,
   Plus, Trash2, X, Trophy, Star, Zap, Lock, SmilePlus,
-  AlertTriangle, AlertOctagon, Quote,
+  AlertTriangle, AlertOctagon, Quote, Crown, ChevronRight,
 } from 'lucide-react';
 import { getMotivationalMessage, analyzeRelapsePattern, getMoodAnalysis } from '../services/aiCoach';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
@@ -42,18 +42,117 @@ function getBudgetAlert(pct: number) {
   return BUDGET_ALERTS.find(a => pct >= a.pct) ?? null;
 }
 
-export default function Dashboard() {
+// ── Modal didacticiel Premium ──
+function PremiumTutorialModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: () => void }) {
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    {
+      emoji: '🧠',
+      title: 'Coach IA personnalisé',
+      desc: 'Chaque matin, ton coach analyse ton historique et te envoie un message adapté à ta situation. Il connaît tes rechutes, tes progrès, tes déclencheurs.',
+      preview: '"Tu as résisté 3 fois cette semaine à des envies de parier après des matchs. C\'est exactement ce type de progression qui change une vie. Continue à identifier ces moments et à les noter."',
+      color: 'bg-indigo-50',
+      iconColor: 'text-indigo-600',
+    },
+    {
+      emoji: '📊',
+      title: 'Analyse de tes rechutes',
+      desc: 'Le coach IA analyse tes patterns de rechutes et identifie tes déclencheurs — heure, humeur, événements sportifs — pour t\'aider à les anticiper.',
+      preview: '"Tes rechutes surviennent principalement le dimanche soir après 20h, souvent après un match de Ligue 1. On va travailler sur ces moments."',
+      color: 'bg-violet-50',
+      iconColor: 'text-violet-600',
+    },
+    {
+      emoji: '💰',
+      title: 'Argent économisé calculé',
+      desc: 'Visualise en temps réel combien tu aurais perdu sans StopBet. Chaque jour de streak = de l\'argent dans ta poche.',
+      preview: 'À ton rythme actuel : +847€ économisés ce mois 💚',
+      color: 'bg-emerald-50',
+      iconColor: 'text-emerald-600',
+    },
+  ];
+
+  const current = steps[step];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm">
+      <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
+        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
+
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex gap-1">
+            {steps.map((_, i) => (
+              <div key={i} className={`h-1.5 rounded-full transition-all ${i === step ? 'w-8 bg-indigo-600' : 'w-3 bg-slate-200'}`} />
+            ))}
+          </div>
+          <button onClick={onClose} className="p-1 text-slate-400"><X size={20} /></button>
+        </div>
+
+        {/* Contenu */}
+        <AnimatePresence mode="wait">
+          <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+            <div className={`w-14 h-14 ${current.color} rounded-2xl flex items-center justify-center text-3xl mb-4`}>
+              {current.emoji}
+            </div>
+            <h3 className="text-xl font-black text-slate-900 mb-2">{current.title}</h3>
+            <p className="text-sm text-slate-500 font-medium leading-relaxed mb-4">{current.desc}</p>
+
+            {/* Preview du coach IA */}
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles size={14} className={current.iconColor} />
+                <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Exemple coach IA</p>
+              </div>
+              <p className="text-sm text-slate-700 font-medium italic leading-relaxed">{current.preview}</p>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Boutons */}
+        <div className="flex gap-3">
+          {step < steps.length - 1 ? (
+            <>
+              <button onClick={onClose} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-2xl font-bold text-sm">
+                Pas maintenant
+              </button>
+              <button onClick={() => setStep(s => s + 1)}
+                className="flex-[2] py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2">
+                Suivant <ChevronRight size={16} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={onClose} className="flex-1 py-3 bg-slate-100 text-slate-500 rounded-2xl font-bold text-sm">
+                Plus tard
+              </button>
+              <button onClick={onUpgrade}
+                className="flex-[2] py-3 bg-indigo-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2">
+                <Crown size={16} /> Essayer 7j gratuits
+              </button>
+            </>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+export default function Dashboard({ onGoToPremium }: { onGoToPremium?: () => void }) {
   const { profile, user } = useFirebase();
-  const [recentBets,     setRecentBets]     = useState<Bet[]>([]);
-  const [goals,          setGoals]          = useState<Goal[]>([]);
-  const [coachMsg,       setCoachMsg]       = useState('Chargement de votre message du jour…');
-  const [analysis,       setAnalysis]       = useState<string | null>(null);
-  const [showAnalysis,   setShowAnalysis]   = useState(false);
-  const [showAddGoal,    setShowAddGoal]    = useState(false);
-  const [newGoal,        setNewGoal]        = useState({ title: '', cost: '' });
-  const [loading,        setLoading]        = useState(false);
-  const [dismissedAlert, setDismissedAlert] = useState<string | null>(null);
-  const [newBadge,       setNewBadge]       = useState<{ emoji: string; name: string } | null>(null);
+  const [recentBets,        setRecentBets]        = useState<Bet[]>([]);
+  const [goals,             setGoals]             = useState<Goal[]>([]);
+  const [coachMsg,          setCoachMsg]          = useState('Chargement de votre message du jour…');
+  const [analysis,          setAnalysis]          = useState<string | null>(null);
+  const [showAnalysis,      setShowAnalysis]      = useState(false);
+  const [showAddGoal,       setShowAddGoal]       = useState(false);
+  const [newGoal,           setNewGoal]           = useState({ title: '', cost: '' });
+  const [loading,           setLoading]           = useState(false);
+  const [dismissedAlert,    setDismissedAlert]    = useState<string | null>(null);
+  const [newBadge,          setNewBadge]          = useState<{ emoji: string; name: string } | null>(null);
+  const [showBanner,        setShowBanner]        = useState(false);
+  const [showTutorial,      setShowTutorial]      = useState(false);
 
   const [showMoodModal, setShowMoodModal] = useState(false);
   const [todayMood,     setTodayMood]     = useState<string | null>(null);
@@ -108,6 +207,25 @@ export default function Dashboard() {
     loadMoods();
   }, [user?.uid, todayStr]);
 
+  // ── Bannière + modal Premium pour users free ──
+  useEffect(() => {
+    if (!profile || profile.subscriptionType === 'premium') return;
+
+    // Bannière toujours visible pour les free
+    setShowBanner(true);
+
+    // Modal après 3 jours d'utilisation
+    const createdAt = profile.createdAt ? new Date(profile.createdAt) : null;
+    if (createdAt) {
+      const daysSinceCreation = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
+      const tutorialShown = localStorage.getItem(`tutorial_shown_${user?.uid}`);
+      if (daysSinceCreation >= 3 && !tutorialShown) {
+        setTimeout(() => setShowTutorial(true), 2000);
+        localStorage.setItem(`tutorial_shown_${user?.uid}`, 'true');
+      }
+    }
+  }, [profile?.subscriptionType, user?.uid]);
+
   useEffect(() => {
     if (!profile || !user) return;
     const isPremium = profile.subscriptionType === 'premium';
@@ -156,15 +274,12 @@ export default function Dashboard() {
         value: moodValue, note, date: todayStr, savedAt: new Date().toISOString(),
       });
       setTodayMood(moodValue);
-
       const newStreak = moodStreak + 1;
       const updates: Record<string, any> = {
         xp: (profile.xp ?? 0) + 5,
         moodStreakCount: newStreak,
         lastMoodDate: todayStr,
       };
-
-      // Badges journal — Premium uniquement
       const isPremiumUser = profile.subscriptionType === 'premium';
       if (isPremiumUser) {
         const earned = [...(profile.badges ?? [])];
@@ -183,9 +298,7 @@ export default function Dashboard() {
           setTimeout(() => setNewBadge(null), 3000);
         }
       }
-
       await updateDoc(doc(db, 'users', user.uid), updates);
-
       if (isPremiumUser && MOOD_RISK[moodValue]) {
         const a = await getMoodAnalysis(moodValue, note, profile, recentBets);
         setMoodAnalysis(a);
@@ -233,7 +346,7 @@ export default function Dashboard() {
   const todayMoodDef = MOODS.find(m => m.value === todayMood);
   const budgetAlert  = getBudgetAlert(spendPct);
 
-  const pieData    = [
+  const pieData = [
     { name: 'Dépensé', value: totalSpent },
     { name: 'Restant', value: Math.max(0, profile.monthlyIncome - totalSpent) },
   ];
@@ -243,7 +356,34 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6 pb-24">
 
-      {/* ── Popup badge gagné — Premium ── */}
+      {/* ── Bannière Premium pour users free ── */}
+      <AnimatePresence>
+        {!isPremium && showBanner && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-4 text-white relative overflow-hidden">
+            <button onClick={() => setShowBanner(false)} className="absolute top-3 right-3 text-white/60"><X size={16} /></button>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-white/20 rounded-xl"><Sparkles size={18} /></div>
+              <div>
+                <p className="font-black text-sm">Découvrez le Coach IA Premium</p>
+                <p className="text-xs text-white/70">Un message personnalisé chaque matin basé sur votre historique</p>
+              </div>
+            </div>
+            <div className="bg-white/10 rounded-xl p-3 mb-3">
+              <p className="text-xs italic text-white/90 leading-relaxed">
+                "Tu as résisté 3 fois cette semaine après des matchs. C'est exactement ce type de progression qui change une vie..."
+              </p>
+            </div>
+            <button
+              onClick={() => { setShowBanner(false); onGoToPremium?.(); }}
+              className="w-full py-2.5 bg-white text-indigo-600 rounded-xl font-black text-sm flex items-center justify-center gap-2">
+              <Crown size={14} /> Voir le Premium — 7j gratuits
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Popup badge gagné ── */}
       <AnimatePresence>
         {newBadge && (
           <motion.div
@@ -261,7 +401,7 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* ── Alerte budget — Premium uniquement ── */}
+      {/* ── Alerte budget ── */}
       <AnimatePresence>
         {isPremium && budgetAlert && dismissedAlert !== budgetAlert.level && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
@@ -313,7 +453,7 @@ export default function Dashboard() {
         <div className="absolute -right-8 -bottom-8 opacity-10 rotate-12"><Flame size={160} /></div>
       </motion.div>
 
-      {/* ── Citation du jour — Premium uniquement ── */}
+      {/* ── Citation du jour ── */}
       {isPremium ? (
         <div className="bg-slate-900 p-5 rounded-2xl relative overflow-hidden">
           <div className="flex gap-3 items-start relative z-10">
@@ -365,7 +505,6 @@ export default function Dashboard() {
             + Ajouter mon humeur du jour (+5 XP)
           </button>
         )}
-
         {recentMoods.length > 0 && (
           <div className="flex gap-2 justify-between">
             {recentMoods.slice(0, 7).map((m, i) => {
@@ -380,8 +519,6 @@ export default function Dashboard() {
             })}
           </div>
         )}
-
-        {/* Progression badge journal — Premium uniquement */}
         {isPremium && moodStreak > 0 && moodStreak < 30 && (
           <div className="mt-3 pt-3 border-t border-slate-50">
             <div className="flex justify-between text-xs font-bold mb-1">
@@ -442,10 +579,10 @@ export default function Dashboard() {
             </button>
           )}
           {!isPremium && (
-            <div className="mt-3 flex items-center gap-2">
-              <Lock size={12} className="text-slate-400" />
-              <p className="text-xs text-slate-400 font-medium">Coach IA Claude — <span className="text-indigo-600 font-bold">Premium uniquement</span></p>
-            </div>
+            <button onClick={() => onGoToPremium?.()}
+              className="mt-3 flex items-center gap-2 text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-2 rounded-xl hover:bg-indigo-100 transition-colors">
+              <Crown size={12} /> Débloquer le Coach IA — 7j gratuits
+            </button>
           )}
         </div>
       </div>
@@ -639,6 +776,16 @@ export default function Dashboard() {
           <SmilePlus size={24} />
         </motion.button>
       )}
+
+      {/* ── Modal didacticiel Premium ── */}
+      <AnimatePresence>
+        {showTutorial && (
+          <PremiumTutorialModal
+            onClose={() => setShowTutorial(false)}
+            onUpgrade={() => { setShowTutorial(false); onGoToPremium?.(); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

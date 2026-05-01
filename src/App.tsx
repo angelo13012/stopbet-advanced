@@ -80,10 +80,10 @@ export default function App() {
 
   if (!isAuthReady || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center">
           <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4" />
-          <p className="text-slate-600 dark:text-slate-400 font-medium">Chargement de StopBet…</p>
+          <p className="text-slate-600 font-medium">Chargement de StopBet…</p>
         </div>
       </div>
     );
@@ -115,7 +115,7 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard':    return <Dashboard />;
+      case 'dashboard':    return <Dashboard onGoToPremium={() => setActiveTab('subscription')} />;
       case 'progress':     return <Progress />;
       case 'leaderboard':  return <Leaderboard />;
       case 'log':          return <BetLogger onComplete={() => setActiveTab('dashboard')} />;
@@ -123,7 +123,7 @@ export default function App() {
       case 'support':      return <Support onBack={() => setActiveTab('profile')} />;
       case 'profile':      return (
         <div className="p-6">
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Mon profil</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Mon profil</h2>
           <p className="text-slate-500 font-medium mb-1">{profile.firstName} {profile.lastName}</p>
 
           <div className="flex items-center gap-2 mb-6">
@@ -148,8 +148,8 @@ export default function App() {
               { label: 'XP',              value: `${profile.xp ?? 0}` },
               { label: 'Jours sans pari', value: `${profile.streakCount}j` },
             ].map(({ label, value }) => (
-              <div key={label} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-center">
-                <p className="text-xl font-black text-slate-900 dark:text-white">{value}</p>
+              <div key={label} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 text-center">
+                <p className="text-xl font-black text-slate-900">{value}</p>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-1">{label}</p>
               </div>
             ))}
@@ -159,11 +159,11 @@ export default function App() {
 
             {profile.subscriptionType === 'premium' ? (
               <button onClick={() => setShowPlatformsModal(true)}
-                className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+                className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-orange-50 rounded-lg text-orange-500"><ShieldOff size={20} /></div>
                   <div className="text-left">
-                    <p className="font-semibold text-slate-900 dark:text-white">Mes plateformes de paris</p>
+                    <p className="font-semibold text-slate-900">Mes plateformes de paris</p>
                     <p className="text-sm text-slate-500">
                       {savedPlatforms.length > 0
                         ? `${savedPlatforms.length} plateforme${savedPlatforms.length > 1 ? 's' : ''} — liens d'auto-exclusion`
@@ -175,11 +175,11 @@ export default function App() {
               </button>
             ) : (
               <button onClick={() => setActiveTab('subscription')}
-                className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 opacity-60">
+                className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100 opacity-60">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-orange-50 rounded-lg text-orange-500"><ShieldOff size={20} /></div>
                   <div className="text-left">
-                    <p className="font-semibold text-slate-900 dark:text-white">Mes plateformes de paris</p>
+                    <p className="font-semibold text-slate-900">Mes plateformes de paris</p>
                     <p className="text-sm text-indigo-500 font-bold">Premium uniquement</p>
                   </div>
                 </div>
@@ -188,11 +188,11 @@ export default function App() {
             )}
 
             <button onClick={() => setShowContactsModal(true)}
-              className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-red-50 rounded-lg text-red-500"><Phone size={20} /></div>
                 <div className="text-left">
-                  <p className="font-semibold text-slate-900 dark:text-white">Contacts d'urgence</p>
+                  <p className="font-semibold text-slate-900">Contacts d'urgence</p>
                   <p className="text-sm text-slate-500">
                     {(profile.emergencyContacts ?? []).length > 0
                       ? `${profile.emergencyContacts!.length} contact${profile.emergencyContacts!.length > 1 ? 's' : ''} configuré${profile.emergencyContacts!.length > 1 ? 's' : ''}`
@@ -204,13 +204,13 @@ export default function App() {
             </button>
 
             {notifSupported && (
-              <div className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              <div className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-lg ${notifEnabled ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'}`}>
                     {notifEnabled ? <Bell size={20} /> : <BellOff size={20} />}
                   </div>
                   <div className="text-left">
-                    <p className="font-semibold text-slate-900 dark:text-white">Notifications</p>
+                    <p className="font-semibold text-slate-900">Notifications</p>
                     <p className="text-sm text-slate-500">{notifEnabled ? 'Activées — rappels quotidiens' : 'Désactivées'}</p>
                   </div>
                 </div>
@@ -222,11 +222,11 @@ export default function App() {
             )}
 
             <button onClick={() => setActiveTab('leaderboard')}
-              className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-amber-50 rounded-lg text-amber-500"><Trophy size={20} /></div>
                 <div className="text-left">
-                  <p className="font-semibold text-slate-900 dark:text-white">Classement</p>
+                  <p className="font-semibold text-slate-900">Classement</p>
                   <p className="text-sm text-slate-500">Voir ma position mondiale</p>
                 </div>
               </div>
@@ -234,11 +234,11 @@ export default function App() {
             </button>
 
             <button onClick={() => setActiveTab('subscription')}
-              className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><CreditCard size={20} /></div>
                 <div className="text-left">
-                  <p className="font-semibold text-slate-900 dark:text-white">Abonnement</p>
+                  <p className="font-semibold text-slate-900">Abonnement</p>
                   <p className="text-sm text-slate-500 capitalize">{profile.subscriptionType}</p>
                 </div>
               </div>
@@ -246,11 +246,11 @@ export default function App() {
             </button>
 
             <button onClick={() => setShowCGU(true)}
-              className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-slate-50 rounded-lg text-slate-500"><Shield size={20} /></div>
                 <div className="text-left">
-                  <p className="font-semibold text-slate-900 dark:text-white">CGU & Confidentialité</p>
+                  <p className="font-semibold text-slate-900">CGU & Confidentialité</p>
                   <p className="text-sm text-slate-500">Mentions légales et politique de données</p>
                 </div>
               </div>
@@ -258,11 +258,11 @@ export default function App() {
             </button>
 
             <button onClick={() => setActiveTab('support')}
-              className="w-full flex items-center justify-between p-4 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl shadow-sm border border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><MessageCircle size={20} /></div>
                 <div className="text-left">
-                  <p className="font-semibold text-slate-900 dark:text-white">Support & aide</p>
+                  <p className="font-semibold text-slate-900">Support & aide</p>
                   <p className="text-sm text-slate-500">Chatbot, contact, signaler un bug</p>
                 </div>
               </div>
@@ -282,28 +282,27 @@ export default function App() {
             </button>
 
             <button onClick={() => setShowDeleteModal(true)}
-              className="w-full flex items-center gap-3 p-4 bg-white dark:bg-slate-800 border border-red-100 dark:border-red-900 text-red-400 rounded-2xl font-semibold text-sm">
+              className="w-full flex items-center gap-3 p-4 bg-white border border-red-100 text-red-400 rounded-2xl font-semibold text-sm">
               <Trash2 size={18} /> Supprimer mon compte
             </button>
 
           </div>
         </div>
       );
-      default: return <Dashboard />;
+      default: return <Dashboard onGoToPremium={() => setActiveTab('subscription')} />;
     }
   };
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 max-w-md mx-auto relative shadow-2xl transition-colors duration-300">
+      <div className="min-h-screen bg-slate-50 pb-24 max-w-md mx-auto relative shadow-2xl">
 
-        <header className="p-6 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center sticky top-0 z-10 transition-colors duration-300">
+        <header className="p-6 bg-white border-b border-slate-100 flex justify-between items-center sticky top-0 z-10">
           <div>
             <h1 className="text-2xl font-black text-indigo-600 tracking-tighter">StopBet</h1>
             <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">Reprenez le contrôle</p>
           </div>
           <div className="flex items-center gap-3">
-            <ThemeToggle />
             <button onClick={() => setShowSOS(true)}
               className="flex items-center gap-1.5 bg-red-500 text-white px-3 py-1.5 rounded-full font-black text-xs uppercase tracking-wider active:scale-95 transition-transform animate-pulse">
               <AlertTriangle size={13} /> SOS
@@ -339,7 +338,7 @@ export default function App() {
           </AnimatePresence>
         </main>
 
-        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 dark:bg-slate-900/80 backdrop-blur-lg border-t border-slate-100 dark:border-slate-800 px-2 py-3 flex justify-around items-center z-20">
+        <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-2 py-3 flex justify-around items-center z-20">
           <NavBtn active={activeTab === 'dashboard'}   onClick={() => setActiveTab('dashboard')}   icon={<LayoutDashboard size={21} />} label="Accueil" />
           <NavBtn active={activeTab === 'progress'}    onClick={() => setActiveTab('progress')}    icon={<TrendingUp size={21} />}      label="Progrès" />
           <button onClick={() => setActiveTab('log')}
@@ -419,9 +418,9 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
-        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
+        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-black text-slate-900 dark:text-white">Supprimer mon compte</h3>
+          <h3 className="text-xl font-black text-slate-900">Supprimer mon compte</h3>
           <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
         </div>
         <div className="bg-red-50 border border-red-100 rounded-2xl p-4 mb-6">
@@ -437,12 +436,12 @@ function DeleteAccountModal({ onClose }: { onClose: () => void }) {
           value={confirm}
           onChange={e => { setConfirm(e.target.value); setError(''); }}
           placeholder="SUPPRIMER"
-          className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-red-400 mb-3"
+          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-sm focus:outline-none focus:ring-2 focus:ring-red-400 mb-3"
         />
         {error && <p className="text-xs text-red-500 font-medium mb-3">{error}</p>}
         <div className="flex gap-2">
           <button onClick={onClose} disabled={loading}
-            className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold text-sm">
+            className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm">
             Annuler
           </button>
           <button onClick={handleDelete} disabled={loading || confirm !== 'SUPPRIMER'}
@@ -479,10 +478,10 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
-        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[32px] shadow-2xl max-h-[90vh] flex flex-col">
+        className="bg-white w-full max-w-md rounded-t-[32px] shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center p-8 pb-4 shrink-0">
           <div>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white">Mes plateformes</h3>
+            <h3 className="text-xl font-black text-slate-900">Mes plateformes</h3>
             <p className="text-xs text-slate-400 font-medium mt-1">Coche celles où tu es inscrit</p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
@@ -492,14 +491,14 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
               <Check size={32} className="text-emerald-600" />
             </div>
-            <p className="font-black text-slate-900 dark:text-white">Sauvegardé !</p>
+            <p className="font-black text-slate-900">Sauvegardé !</p>
           </div>
         ) : (
           <>
             <div className="overflow-y-auto flex-1 px-8 space-y-2 pb-4">
               {PLATFORMS.map(p => (
                 <div key={p.id} className={`flex items-center gap-3 p-4 rounded-2xl border-2 transition-all ${
-                  selected.includes(p.id) ? 'bg-orange-50 border-orange-200' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'
+                  selected.includes(p.id) ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-100'
                 }`}>
                   <button onClick={() => toggle(p.id)}
                     className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center shrink-0 transition-all ${
@@ -507,7 +506,7 @@ function PlatformsModal({ savedPlatforms, userId, onClose }: {
                     }`}>
                     {selected.includes(p.id) && <Check size={14} className="text-white" />}
                   </button>
-                  <span className={`flex-1 font-bold text-sm ${selected.includes(p.id) ? 'text-orange-700' : 'text-slate-700 dark:text-slate-300'}`}>
+                  <span className={`flex-1 font-bold text-sm ${selected.includes(p.id) ? 'text-orange-700' : 'text-slate-700'}`}>
                     {p.name}
                   </span>
                   {selected.includes(p.id) && (
@@ -580,10 +579,10 @@ function ContactsModal({ contacts, userId, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
-        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[32px] p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
+        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl max-h-[85vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white">Contacts d'urgence</h3>
+            <h3 className="text-xl font-black text-slate-900">Contacts d'urgence</h3>
             <p className="text-xs text-slate-400 font-medium mt-1">Accessibles en un tap dans le mode SOS</p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
@@ -593,7 +592,7 @@ function ContactsModal({ contacts, userId, onClose }: {
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
               <Check size={32} className="text-emerald-600" />
             </div>
-            <p className="font-black text-slate-900 dark:text-white">Contacts sauvegardés !</p>
+            <p className="font-black text-slate-900">Contacts sauvegardés !</p>
           </div>
         ) : (
           <>
@@ -601,12 +600,12 @@ function ContactsModal({ contacts, userId, onClose }: {
               {list.length === 0 ? (
                 <p className="text-sm text-slate-400 font-medium text-center py-4">Aucun contact encore ajouté</p>
               ) : list.map((c, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl">
+                <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
                   <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
                     <Phone size={16} className="text-red-500" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-bold text-slate-900 dark:text-white text-sm">{c.name}</p>
+                    <p className="font-bold text-slate-900 text-sm">{c.name}</p>
                     <p className="text-xs text-slate-400 font-medium">{c.phone}</p>
                   </div>
                   <button onClick={() => handleRemove(i)} className="text-slate-300 hover:text-red-500 transition-colors">
@@ -620,10 +619,10 @@ function ContactsModal({ contacts, userId, onClose }: {
                 <p className="text-xs font-black text-slate-400 uppercase tracking-wider">Ajouter un contact</p>
                 <input type="text" placeholder="Prénom (ex: Maman)" value={name}
                   onChange={e => setName(e.target.value)}
-                  className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-400" />
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-400" />
                 <input type="tel" placeholder="Numéro (ex: 0612345678)" value={phone}
                   onChange={e => setPhone(e.target.value)}
-                  className="w-full p-4 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-400" />
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-red-400" />
                 <button onClick={handleAdd} disabled={!name.trim() || !phone.trim()}
                   className="w-full py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40">
                   <Plus size={16} /> Ajouter
@@ -678,10 +677,10 @@ function PseudoModal({ currentPseudo, userId, profile, onClose }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 backdrop-blur-sm">
       <motion.div initial={{ opacity: 0, y: 100 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 100 }}
-        className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
+        className="bg-white w-full max-w-md rounded-t-[32px] p-8 shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white">{currentPseudo ? 'Modifier le pseudo' : 'Choisir un pseudo'}</h3>
+            <h3 className="text-xl font-black text-slate-900">{currentPseudo ? 'Modifier le pseudo' : 'Choisir un pseudo'}</h3>
             <p className="text-xs text-slate-400 font-medium mt-1">Visible dans le classement mondial</p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400"><X size={22} /></button>
@@ -691,7 +690,7 @@ function PseudoModal({ currentPseudo, userId, profile, onClose }: {
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
               <Check size={32} className="text-emerald-600" />
             </div>
-            <p className="font-black text-slate-900 dark:text-white">Pseudo sauvegardé !</p>
+            <p className="font-black text-slate-900">Pseudo sauvegardé !</p>
             <p className="text-sm text-slate-500 mt-1">@{pseudo.trim().toLowerCase()}</p>
           </div>
         ) : (
@@ -700,7 +699,7 @@ function PseudoModal({ currentPseudo, userId, profile, onClose }: {
               <AtSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
               <input type="text" value={pseudo} onChange={e => { setPseudo(e.target.value); setError(''); }}
                 placeholder="tonpseudo" maxLength={20}
-                className={`w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-800 border rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600 ${error ? 'border-red-300' : 'border-slate-100 dark:border-slate-700'}`} />
+                className={`w-full pl-12 pr-4 py-4 bg-slate-50 border rounded-2xl font-bold focus:outline-none focus:ring-2 focus:ring-indigo-600 ${error ? 'border-red-300' : 'border-slate-100'}`} />
             </div>
             {error
               ? <p className="text-xs text-red-500 font-medium mb-3 ml-1">{error}</p>
